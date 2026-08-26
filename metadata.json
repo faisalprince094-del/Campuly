@@ -1,0 +1,8 @@
+{
+  "name": "Campusly",
+  "description": "AI-powered all-in-one student productivity, voice companion Campusly AI, presentation creator, study timer, expense tracker, and university planner.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
+

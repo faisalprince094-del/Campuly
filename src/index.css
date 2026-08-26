@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    background-color: #F8FAFC;
+    color: #0F172A;
+  }
+}
+
+.dark body {
+  background-color: #05070A;
+  color: #F8FAFC;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* Clean Utility / Minimal Theme Card & Container Classes */
+.campus-card-utility {
+  background-color: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .campus-card-utility {
+  background-color: #0B1017;
+  border-color: #1E293B;
+}
+
+.campus-card-large {
+  background-color: #ffffff;
+  border: 1px solid #E2E8F0;
+  border-radius: 24px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .campus-card-large {
+  background-color: #0B1017;
+  border-color: #1E293B;
+}
+
+.campus-pill {
+  white-space: nowrap;
+}
+
+/* Print styles for slide deck export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    page-break-after: always;
+    break-after: page;
+    width: 100vw !important;
+    height: 100vh !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
