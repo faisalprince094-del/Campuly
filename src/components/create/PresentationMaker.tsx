@@ -897,67 +897,75 @@ export const PresentationMaker: React.FC = () => {
           <span className="text-xs font-semibold text-slate-400">{presentations.length} Decks</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {presentations.map((deck) => {
-            return (
-              <motion.div
-                key={deck.id}
-                whileHover={{ y: -3 }}
-                onClick={() => setActivePresentationId(deck.id)}
-                className="p-5 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer transition flex flex-col justify-between group"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                      {deck.slides?.length || 0} Slides
-                    </span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        id={`dup-deck-btn-${deck.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicatePresentation(deck.id);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer"
-                        title="Duplicate"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        id={`del-deck-btn-${deck.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deletePresentation(deck.id);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+        {presentations.length === 0 ? (
+          <div className="text-center py-12 bg-white dark:bg-[#0B1017] rounded-3xl border border-slate-200/80 dark:border-[#1E293B] p-6 space-y-2">
+            <Sparkles className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+            <h4 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC]">No Saved Presentations Yet</h4>
+            <p className="text-xs text-slate-400">Generate a slide deck above to create structured presentations with speech notes.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {presentations.map((deck) => {
+              return (
+                <motion.div
+                  key={deck.id}
+                  whileHover={{ y: -3 }}
+                  onClick={() => setActivePresentationId(deck.id)}
+                  className="p-5 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs hover:border-blue-400 dark:hover:border-blue-600 cursor-pointer transition flex flex-col justify-between group"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                        {deck.slides?.length || 0} Slides
+                      </span>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          id={`dup-deck-btn-${deck.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicatePresentation(deck.id);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer"
+                          title="Duplicate"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          id={`del-deck-btn-${deck.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePresentation(deck.id);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] line-clamp-1">{deck.title}</h3>
+                      <p className="text-xs text-slate-400 line-clamp-2 mt-1">
+                        {deck.subtitle || 'Custom AI deck with speech notes'}
+                      </p>
                     </div>
                   </div>
 
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC] line-clamp-1">{deck.title}</h3>
-                    <p className="text-xs text-slate-400 line-clamp-2 mt-1">
-                      {deck.subtitle || 'Custom AI deck with speech notes'}
-                    </p>
+                  <div className="pt-4 mt-3 border-t border-slate-100 dark:border-[#1E293B] flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">
+                      Updated {new Date(deck.updatedAt).toLocaleDateString()}
+                    </span>
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                      <span>Open Studio</span>
+                      <Edit3 className="w-3 h-3" />
+                    </span>
                   </div>
-                </div>
-
-                <div className="pt-4 mt-3 border-t border-slate-100 dark:border-[#1E293B] flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">
-                    Updated {new Date(deck.updatedAt).toLocaleDateString()}
-                  </span>
-                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                    <span>Open Studio</span>
-                    <Edit3 className="w-3 h-3" />
-                  </span>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

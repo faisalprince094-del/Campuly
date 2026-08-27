@@ -408,82 +408,99 @@ export const StudySection: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {subjects.map((sub) => {
-              const stats = subjectStudyMap[sub.id] || { seconds: 0, minutes: 0, hours: 0, formatted: '0m' };
-              const studiedHours = stats.hours.toFixed(1);
-              const target = sub.targetHours || 40;
-              const targetProgress = Math.min(100, Math.round((stats.hours / target) * 100));
+          {subjects.length === 0 ? (
+            <div className="text-center py-12 bg-white dark:bg-[#0B1017] rounded-3xl border border-slate-200/80 dark:border-[#1E293B] p-6 space-y-3">
+              <BookOpen className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">No Subjects Added Yet</h4>
+                <p className="text-xs text-slate-400 mt-1">Add your university courses to track study hours and target goals.</p>
+              </div>
+              <button
+                id="add-first-subject-btn"
+                onClick={() => setIsAddSubjectOpen(true)}
+                className="px-4 py-2 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+              >
+                + Add First Subject
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {subjects.map((sub) => {
+                const stats = subjectStudyMap[sub.id] || { seconds: 0, minutes: 0, hours: 0, formatted: '0m' };
+                const studiedHours = stats.hours.toFixed(1);
+                const target = sub.targetHours || 40;
+                const targetProgress = Math.min(100, Math.round((stats.hours / target) * 100));
 
-              return (
-                <div
-                  key={sub.id}
-                  className="p-5 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs flex flex-col justify-between group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: sub.color || '#2563EB' }}
-                        />
-                        <span className="text-[10px] font-black uppercase text-slate-400">
-                          {sub.code || 'COURSE'}
-                        </span>
+                return (
+                  <div
+                    key={sub.id}
+                    className="p-5 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs flex flex-col justify-between group"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: sub.color || '#2563EB' }}
+                          />
+                          <span className="text-[10px] font-black uppercase text-slate-400">
+                            {sub.code || 'COURSE'}
+                          </span>
+                        </div>
+                        <button
+                          id={`delete-subject-${sub.id}`}
+                          onClick={() => deleteSubject(sub.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                          title="Delete subject"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
+
+                      <div>
+                        <h4 className="text-base font-bold text-slate-900 dark:text-white">{sub.name}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">{sub.credits || sub.creditHours || 3} Credit Hours</p>
+                      </div>
+
+                      {/* Study Progress */}
+                      <div className="space-y-1.5 pt-2">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="text-slate-500 dark:text-slate-400">Study Tracked</span>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {studiedHours}h / {target}h
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-100 dark:bg-[#101823] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${targetProgress}%`,
+                              backgroundColor: sub.color || '#2563EB',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 mt-3 border-t border-slate-100 dark:border-[#1E293B] flex items-center justify-between">
                       <button
-                        id={`delete-subject-${sub.id}`}
-                        onClick={() => deleteSubject(sub.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition cursor-pointer"
-                        title="Delete subject"
+                        id={`start-study-for-${sub.id}`}
+                        onClick={() => {
+                          setSelectedSubjectId(sub.id);
+                          setSubTab('timer');
+                          startTimer(50, 'focus', sub.id);
+                        }}
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Play className="w-3 h-3 fill-blue-600 dark:fill-blue-400" />
+                        <span>Start 50m Focus</span>
                       </button>
                     </div>
-
-                    <div>
-                      <h4 className="text-base font-bold text-slate-900 dark:text-white">{sub.name}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{sub.credits || sub.creditHours || 3} Credit Hours</p>
-                    </div>
-
-                    {/* Study Progress */}
-                    <div className="space-y-1.5 pt-2">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="text-slate-500 dark:text-slate-400">Study Tracked</span>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {studiedHours}h / {target}h
-                        </span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 dark:bg-[#101823] rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${targetProgress}%`,
-                            backgroundColor: sub.color || '#2563EB',
-                          }}
-                        />
-                      </div>
-                    </div>
                   </div>
-
-                  <div className="pt-4 mt-3 border-t border-slate-100 dark:border-[#1E293B] flex items-center justify-between">
-                    <button
-                      id={`start-study-for-${sub.id}`}
-                      onClick={() => {
-                        setSelectedSubjectId(sub.id);
-                        setSubTab('timer');
-                        startTimer(50, 'focus', sub.id);
-                      }}
-                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Play className="w-3 h-3 fill-blue-600 dark:fill-blue-400" />
-                      <span>Start 50m Focus</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Add Subject Modal */}
           {isAddSubjectOpen && (
@@ -589,40 +606,57 @@ export const StudySection: React.FC = () => {
             <span className="text-xs font-semibold text-slate-400">{studySessions.length} Total Sessions</span>
           </div>
 
-          <div className="space-y-2.5">
-            {studySessions.map((session) => {
-              const sub = subjects.find((s) => s.id === session.subjectId);
-              return (
-                <div
-                  key={session.id}
-                  className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-[#101823] border border-slate-200/80 dark:border-[#1E293B]"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">
-                          {sub ? sub.name : 'General Focus'}
-                        </span>
-                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                          {session.mode}
-                        </span>
+          {studySessions.length === 0 ? (
+            <div className="text-center py-12 space-y-3">
+              <Clock className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">No Study Sessions Logged Yet</h4>
+                <p className="text-xs text-slate-400 mt-1">Start a focus block with the timer to automatically log your study sessions.</p>
+              </div>
+              <button
+                id="start-first-session-btn"
+                onClick={() => setSubTab('timer')}
+                className="px-4 py-2 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+              >
+                Go to Focus Timer
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {studySessions.map((session) => {
+                const sub = subjects.find((s) => s.id === session.subjectId);
+                return (
+                  <div
+                    key={session.id}
+                    className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-[#101823] border border-slate-200/80 dark:border-[#1E293B]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                        <Clock className="w-4 h-4" />
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {session.notes || 'Completed focus block'} • {new Date(session.completedAt).toLocaleString()}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">
+                            {sub ? sub.name : 'General Focus'}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            {session.mode}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {session.notes || 'Completed focus block'} • {new Date(session.completedAt).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <span className="text-xs font-black text-blue-600 dark:text-blue-400">
-                    +{session.durationMinutes}m
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="text-xs font-black text-blue-600 dark:text-blue-400">
+                      +{session.durationMinutes}m
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

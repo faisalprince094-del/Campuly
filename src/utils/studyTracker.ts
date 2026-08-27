@@ -260,3 +260,47 @@ export function getSubjectStudyMap(
 
   return map;
 }
+
+/**
+ * Calculate consecutive study days streak based on study sessions
+ */
+export function calculateStudyStreak(sessions: StudySession[] = []): number {
+  const validSessions = sessions.filter(
+    (s) => s.status !== 'cancelled' && s.mode !== 'break' && ((s.durationSeconds || 0) > 0 || (s.durationMinutes || 0) > 0)
+  );
+
+  if (validSessions.length === 0) return 0;
+
+  // Set of dates with study activity in YYYY-MM-DD format
+  const studyDates = new Set<string>();
+  validSessions.forEach((s) => {
+    const dStr = getLocalDayString(s.completedAt || s.createdAt || s.startTime);
+    if (dStr) studyDates.add(dStr);
+  });
+
+  const now = new Date();
+  const todayStr = getLocalDayString(now);
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = getLocalDayString(yesterday);
+
+  // If user hasn't studied today or yesterday, streak is 0
+  let currentCheck: Date | null = studyDates.has(todayStr) ? now : studyDates.has(yesterdayStr) ? yesterday : null;
+  if (!currentCheck) return 0;
+
+  let streak = 0;
+  const iterDate = new Date(currentCheck);
+
+  while (true) {
+    const checkStr = getLocalDayString(iterDate);
+    if (studyDates.has(checkStr)) {
+      streak++;
+      iterDate.setDate(iterDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}

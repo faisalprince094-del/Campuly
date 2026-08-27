@@ -21,6 +21,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { UserAvatar } from '../ui/UserAvatar';
 import { ImageCropModal } from './ImageCropModal';
 import { validateImageFile, loadFileToImage } from '../../utils/imageStorage';
+import { calculateStudyStreak } from '../../utils/studyTracker';
 
 export const ProfilePage: React.FC = () => {
   const { user, updateProfile, studySessions, tasks, presentations, subjects, showToast } = useApp();
@@ -45,6 +46,7 @@ export const ProfilePage: React.FC = () => {
   const totalStudyMinutes = studySessions.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
   const totalStudyHours = (totalStudyMinutes / 60).toFixed(1);
   const completedTasksCount = tasks.filter((t) => t.completed).length;
+  const focusStreak = calculateStudyStreak(studySessions);
 
   const handleStartEditing = () => {
     setName(user?.name || '');
@@ -441,7 +443,9 @@ export const ProfilePage: React.FC = () => {
 
         <div className="p-5 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs space-y-1">
           <span className="text-xs font-bold text-slate-400">Focus Streak</span>
-          <div className="text-2xl font-black text-slate-900 dark:text-[#F8FAFC]">7 Days</div>
+          <div className="text-2xl font-black text-slate-900 dark:text-[#F8FAFC]">
+            {focusStreak} {focusStreak === 1 ? 'Day' : 'Days'}
+          </div>
           <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Active consistency</div>
         </div>
       </div>
