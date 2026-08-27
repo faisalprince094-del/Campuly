@@ -13,9 +13,22 @@ interface ToastInfo {
   type: 'success' | 'info' | 'warning' | 'error';
 }
 
+export interface RegisterFormData {
+  name: string;
+  email: string;
+  password: string;
+  institution: string;
+  academicLevel: string;
+  studentId?: string;
+  department?: string;
+}
+
 interface AppContextType {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  isAuthLoading: boolean;
   activeTab: MainTab;
   setActiveTab: (tab: MainTab) => void;
   subTab: string;
@@ -86,8 +99,10 @@ interface AppContextType {
   markAllNotificationsRead: () => Promise<void>;
   
   // Auth & Onboarding
-  login: (email: string, password?: string) => Promise<void>;
-  register: (name: string, email: string, password?: string, university?: string, department?: string) => Promise<void>;
+  login: (email: string, password?: string, isDemo?: boolean) => Promise<void>;
+  adminLogin: (email: string, password: string) => Promise<void>;
+  register: (formData: RegisterFormData) => Promise<void>;
+  logout: () => void;
   completeOnboarding: (data: Partial<User>) => Promise<void>;
 
   // Theme & formatting
@@ -101,30 +116,8 @@ interface AppContextType {
 
 // Initial default seed generator for offline / local-first storage
 const getDefaultInitialData = () => {
-  const demoUserId = 'local_user';
-
-  const defaultUser: User = {
-    id: demoUserId,
-    name: 'Student',
-    email: '',
-    profilePhoto: '',
-    university: '',
-    department: '',
-    semester: '',
-    createdAt: new Date().toISOString(),
-    preferences: {
-      theme: 'light',
-      language: 'en',
-      currency: 'BDT',
-      currencySymbol: '৳',
-      dailyStudyGoalMinutes: 120,
-      monthlyBudgetAmount: 0,
-      onboardingCompleted: true,
-    },
-  };
-
   return {
-    user: defaultUser,
+    user: null,
     subjects: [],
     tasks: [],
     expenses: [],
@@ -161,24 +154,28 @@ function setLocalItem<T>(key: string, value: T): void {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const initialSeeds = getDefaultInitialData();
+  // Authentication State
+  const [token, setToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('campusly_token') || null;
+  });
+  const [user, setUser] = useState<User | null>(() => getLocalItem<User | null>('campusly_user', null));
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
-  // Local-First Synchronous State Initialization
-  const [user, setUser] = useState<User>(() => getLocalItem<User>('campusly_user', initialSeeds.user));
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [subTab, setSubTab] = useState<string>('overview');
   const [activePresentationId, setActivePresentationId] = useState<string | null>(null);
 
   // Data Collections with local-first initial state
-  const [subjects, setSubjects] = useState<Subject[]>(() => getLocalItem<Subject[]>('campusly_subjects', initialSeeds.subjects));
-  const [tasks, setTasks] = useState<Task[]>(() => getLocalItem<Task[]>('campusly_tasks', initialSeeds.tasks));
-  const [expenses, setExpenses] = useState<Expense[]>(() => getLocalItem<Expense[]>('campusly_expenses', initialSeeds.expenses));
-  const [budget, setBudget] = useState<Budget | null>(() => getLocalItem<Budget | null>('campusly_budget', initialSeeds.budget));
-  const [studySessions, setStudySessions] = useState<StudySession[]>(() => getLocalItem<StudySession[]>('campusly_study_sessions', initialSeeds.studySessions));
-  const [events, setEvents] = useState<UniversityEvent[]>(() => getLocalItem<UniversityEvent[]>('campusly_events', initialSeeds.events));
-  const [presentations, setPresentations] = useState<Presentation[]>(() => getLocalItem<Presentation[]>('campusly_presentations', initialSeeds.presentations));
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => getLocalItem<AppNotification[]>('campusly_notifications', initialSeeds.notifications));
-  const [notes, setNotes] = useState<Note[]>(() => getLocalItem<Note[]>('campusly_notes', initialSeeds.notes));
+  const [subjects, setSubjects] = useState<Subject[]>(() => getLocalItem<Subject[]>('campusly_subjects', []));
+  const [tasks, setTasks] = useState<Task[]>(() => getLocalItem<Task[]>('campusly_tasks', []));
+  const [expenses, setExpenses] = useState<Expense[]>(() => getLocalItem<Expense[]>('campusly_expenses', []));
+  const [budget, setBudget] = useState<Budget | null>(() => getLocalItem<Budget | null>('campusly_budget', null));
+  const [studySessions, setStudySessions] = useState<StudySession[]>(() => getLocalItem<StudySession[]>('campusly_study_sessions', []));
+  const [events, setEvents] = useState<UniversityEvent[]>(() => getLocalItem<UniversityEvent[]>('campusly_events', []));
+  const [presentations, setPresentations] = useState<Presentation[]>(() => getLocalItem<Presentation[]>('campusly_presentations', []));
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => getLocalItem<AppNotification[]>('campusly_notifications', []));
+  const [notes, setNotes] = useState<Note[]>(() => getLocalItem<Note[]>('campusly_notes', []));
 
   // Modals
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -328,7 +325,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     getAvatarFromDB().then((storedAvatar) => {
       if (storedAvatar) {
         setUser((prev) => {
-          if (prev.profilePhoto !== storedAvatar) {
+          if (prev && prev.profilePhoto !== storedAvatar) {
             return { ...prev, profilePhoto: storedAvatar };
           }
           return prev;
@@ -339,7 +336,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  // Background server sync if available
+  // Background server sync for student data
   const refreshAllData = useCallback(async () => {
     try {
       const [subRes, taskRes, expRes, budRes, sessRes, eveRes, presRes, notifRes, notesRes] = await Promise.all([
@@ -354,19 +351,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         apiRequest<Note[]>('/api/notes').catch(() => null),
       ]);
 
-      if (subRes && subRes.length > 0) setSubjects(subRes);
-      if (taskRes && taskRes.length > 0) setTasks(taskRes);
-      if (expRes && expRes.length > 0) setExpenses(expRes);
+      if (subRes) setSubjects(subRes);
+      if (taskRes) setTasks(taskRes);
+      if (expRes) setExpenses(expRes);
       if (budRes) setBudget(budRes);
-      if (sessRes && sessRes.length > 0) setStudySessions(sessRes);
-      if (eveRes && eveRes.length > 0) setEvents(eveRes);
-      if (presRes && presRes.length > 0) setPresentations(presRes);
-      if (notifRes && notifRes.length > 0) setNotifications(notifRes);
-      if (notesRes && notesRes.length > 0) setNotes(notesRes);
+      if (sessRes) setStudySessions(sessRes);
+      if (eveRes) setEvents(eveRes);
+      if (presRes) setPresentations(presRes);
+      if (notifRes) setNotifications(notifRes);
+      if (notesRes) setNotes(notesRes);
     } catch {
-      // Offline / local-first mode: perfectly silent fallback
+      // Offline / local-first mode: fallback
     }
   }, []);
+
+  // Verify session on initial app load
+  useEffect(() => {
+    let isMounted = true;
+    const verifyAuth = async () => {
+      const savedToken = localStorage.getItem('campusly_token');
+      if (savedToken && savedToken !== 'null' && savedToken !== 'undefined') {
+        try {
+          const res = await apiRequest<{ user: User; token: string }>('/api/auth/me');
+          if (isMounted && res.user) {
+            setUser(res.user);
+            setToken(res.token);
+            if (res.user.role !== 'admin') {
+              refreshAllData();
+            }
+          }
+        } catch (err: any) {
+          console.warn('Session verification failed, logging out:', err);
+          if (isMounted) {
+            localStorage.removeItem('campusly_token');
+            localStorage.removeItem('campusly_user');
+            setUser(null);
+            setToken(null);
+          }
+        }
+      }
+      if (isMounted) {
+        setIsAuthLoading(false);
+      }
+    };
+
+    verifyAuth();
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshAllData]);
 
   // Global Timer Interval (calculates exact elapsed seconds using timestamps)
   useEffect(() => {
@@ -836,29 +869,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     apiRequest('/api/notifications/read-all', { method: 'PATCH' }).catch(() => {});
   }, [showToast]);
 
-  const login = useCallback(async (email: string, _password?: string) => {
-    if (user) {
-      const updatedUser = { ...user, email };
-      setUser(updatedUser);
-      localStorage.setItem('campusly_user', JSON.stringify(updatedUser));
-    }
-    showToast(`Welcome back, ${user?.name || 'Student'}!`, 'success');
-  }, [user, showToast]);
+  const login = useCallback(async (email: string, password?: string, isDemo: boolean = false) => {
+    try {
+      const res = await apiRequest<{ user: User; token: string }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, isDemo }),
+      });
 
-  const register = useCallback(async (name: string, email: string, _password?: string, university?: string, department?: string) => {
-    if (user) {
-      const updatedUser: User = {
-        ...user,
-        name,
-        email,
-        university: university || user.university,
-        department: department || user.department,
-      };
-      setUser(updatedUser);
-      localStorage.setItem('campusly_user', JSON.stringify(updatedUser));
+      setUser(res.user);
+      setToken(res.token);
+      setLocalItem('campusly_user', res.user);
+      setLocalItem('campusly_token', res.token);
+
+      showToast(`Welcome back, ${res.user.name || 'Student'}!`, 'success');
+
+      if (res.user.role !== 'admin') {
+        await refreshAllData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Login failed. Please check your credentials.', 'error');
+      throw err;
     }
-    showToast(`Account created for ${name}!`, 'success');
-  }, [user, showToast]);
+  }, [showToast, refreshAllData]);
+
+  const adminLogin = useCallback(async (email: string, password: string) => {
+    try {
+      const res = await apiRequest<{ user: User; token: string }>('/api/admin/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+
+      setUser(res.user);
+      setToken(res.token);
+      setLocalItem('campusly_user', res.user);
+      setLocalItem('campusly_token', res.token);
+
+      showToast('Admin access granted. Welcome to Campusly Admin Console.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Admin authentication failed.', 'error');
+      throw err;
+    }
+  }, [showToast]);
+
+  const register = useCallback(async (formData: RegisterFormData) => {
+    try {
+      const res = await apiRequest<{ user: User; token: string }>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify(formData),
+      });
+
+      setUser(res.user);
+      setToken(res.token);
+      setLocalItem('campusly_user', res.user);
+      setLocalItem('campusly_token', res.token);
+
+      showToast(`Account created! Welcome to Campusly, ${res.user.name}.`, 'success');
+      await refreshAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Sign up failed. Please check your details.', 'error');
+      throw err;
+    }
+  }, [showToast, refreshAllData]);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('campusly_user');
+      localStorage.removeItem('campusly_token');
+      localStorage.removeItem('campusly_subjects');
+      localStorage.removeItem('campusly_tasks');
+      localStorage.removeItem('campusly_expenses');
+      localStorage.removeItem('campusly_budget');
+      localStorage.removeItem('campusly_study_sessions');
+      localStorage.removeItem('campusly_events');
+      localStorage.removeItem('campusly_presentations');
+      localStorage.removeItem('campusly_notifications');
+      localStorage.removeItem('campusly_notes');
+      localStorage.removeItem('campusly_active_timer');
+    }
+    setSubjects([]);
+    setTasks([]);
+    setExpenses([]);
+    setBudget(null);
+    setStudySessions([]);
+    setEvents([]);
+    setPresentations([]);
+    setNotifications([]);
+    setNotes([]);
+    showToast('You have been signed out.', 'info');
+  }, [showToast]);
 
   const completeOnboarding = useCallback(async (data: Partial<User>) => {
     if (user) {
@@ -915,11 +1015,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const unreadNotifsCount = notifications.filter((n) => !n.read).length;
 
+  const isAuthenticated = Boolean(user && token && user.id);
+  const isAdmin = Boolean(user && user.role === 'admin');
+
   return (
     <AppContext.Provider
       value={{
         user,
-        isAuthenticated: true,
+        token,
+        isAuthenticated,
+        isAdmin,
+        isAuthLoading,
         activeTab,
         setActiveTab,
         subTab,
@@ -977,7 +1083,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNotificationRead,
         markAllNotificationsRead,
         login,
+        adminLogin,
         register,
+        logout,
         completeOnboarding,
         theme,
         setTheme,

@@ -14,6 +14,14 @@ import {
   GEMINI_MODELS,
   PRIMARY_GEMINI_MODEL,
 } from './src/server/geminiCore';
+import {
+  hashPassword,
+  verifyPassword,
+  createSessionToken,
+  verifySessionToken,
+  sanitizeUser,
+  ensureAdminAccount,
+} from './src/server/authCore';
 
 dotenv.config();
 
@@ -54,6 +62,7 @@ app.use((req, res, next) => {
     !url.startsWith('/api') &&
     (url.startsWith('/ai/') ||
       url.startsWith('/auth/') ||
+      url.startsWith('/admin/') ||
       url.startsWith('/tasks') ||
       url.startsWith('/expenses') ||
       url.startsWith('/budget') ||
@@ -98,25 +107,34 @@ interface DatabaseSchema {
 // Initial seed data generator for clean default database
 const getInitialSeed = (): DatabaseSchema => {
   const demoUserId = 'user_demo_101';
+  const demoHash = hashPassword('password123');
 
-  return {
+  const seed: DatabaseSchema = {
     users: [
       {
         id: demoUserId,
-        name: 'Student',
-        email: '',
-        profilePhoto: '',
-        university: '',
-        department: '',
-        semester: '',
-        createdAt: new Date().toISOString(),
+        name: 'Demo Student',
+        email: 'student@university.edu',
+        passwordHash: demoHash.hash,
+        passwordSalt: demoHash.salt,
+        studentId: 'STU-2026-001',
+        institution: 'University of Dhaka',
+        academicLevel: '4th Year, 8th Semester',
+        university: 'University of Dhaka',
+        department: 'Computer Science & Engineering',
+        semester: '8th Semester',
+        role: 'student',
+        status: 'active',
+        profilePhoto: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        createdAt: new Date('2026-01-10T10:00:00Z').toISOString(),
+        lastLoginAt: new Date().toISOString(),
         preferences: {
           theme: 'light',
           language: 'en',
           currency: 'BDT',
           currencySymbol: '৳',
-          dailyStudyGoalMinutes: 120,
-          monthlyBudgetAmount: 0,
+          dailyStudyGoalMinutes: 240,
+          monthlyBudgetAmount: 12000,
           onboardingCompleted: true,
         },
       },
@@ -132,17 +150,20 @@ const getInitialSeed = (): DatabaseSchema => {
     notes: [],
     aiFeedback: [],
   };
+
+  ensureAdminAccount(seed.users);
+  return seed;
 };
 
 function loadDB(): DatabaseSchema {
   if (inMemoryDB) {
+    ensureAdminAccount(inMemoryDB.users);
     return inMemoryDB;
   }
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(data);
-      // Ensure all collections exist
       const defaultSeed = getInitialSeed();
       inMemoryDB = {
         users: parsed.users || defaultSeed.users,
@@ -157,6 +178,7 @@ function loadDB(): DatabaseSchema {
         notes: parsed.notes || defaultSeed.notes,
         aiFeedback: parsed.aiFeedback || defaultSeed.aiFeedback,
       };
+      ensureAdminAccount(inMemoryDB.users);
       return inMemoryDB;
     }
   } catch (err) {
@@ -176,24 +198,67 @@ function saveDB(db: DatabaseSchema) {
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
-    // In read-only serverless filesystems, disk write warnings are non-fatal
     console.warn('Note: Unable to write to disk, preserved in memory:', err);
   }
 }
 
-// User context middleware
+// User context resolver
 function getUserId(req: express.Request): string {
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
+    const token = authHeader.substring(7).trim();
     if (token && token !== 'null' && token !== 'undefined') {
+      const verified = verifySessionToken(token);
+      if (verified && verified.userId) {
+        return verified.userId;
+      }
       return token;
     }
   }
   const queryUser = req.query.userId as string;
   if (queryUser) return queryUser;
-  // Default to demo user
   return 'user_demo_101';
+}
+
+function getAuthContext(req: express.Request): { user: any; userId: string; role: 'student' | 'admin' } | null {
+  const authHeader = req.headers['authorization'];
+  let token = '';
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (req.query.token) {
+    token = (req.query.token as string).trim();
+  }
+
+  if (!token || token === 'null' || token === 'undefined') {
+    return null;
+  }
+
+  const db = loadDB();
+  const verified = verifySessionToken(token);
+  if (verified) {
+    const user = db.users.find((u) => u.id === verified.userId);
+    if (user) {
+      return { user, userId: user.id, role: user.role || verified.role };
+    }
+  }
+
+  const directUser = db.users.find((u) => u.id === token);
+  if (directUser) {
+    return { user: directUser, userId: directUser.id, role: directUser.role || 'student' };
+  }
+
+  return null;
+}
+
+function requireAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const auth = getAuthContext(req);
+  if (!auth || auth.role !== 'admin') {
+    return res.status(403).json({
+      error: 'Access Denied. Administrator privileges required to access this resource.',
+    });
+  }
+  (req as any).adminUser = auth.user;
+  next();
 }
 
 // ======================== API ROUTES ========================
@@ -203,144 +268,408 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Authentication
+// Authentication: Student & Admin Login
 app.post('/api/auth/login', (req, res) => {
   const { email, password, isGoogle, isDemo } = req.body;
   const db = loadDB();
 
   if (isDemo) {
-    const demoUser = db.users[0];
-    return res.json({ user: demoUser, token: demoUser.id });
+    const demoUser = db.users.find((u) => u.email === 'student@university.edu') || db.users[0];
+    const token = createSessionToken(demoUser.id, demoUser.role || 'student');
+    return res.json({ user: sanitizeUser(demoUser), token });
   }
 
-  if (isGoogle) {
-    // Google Sign-In simulation / lookup
-    let user = db.users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase());
-    if (!user) {
-      const newUserId = `user_${Date.now()}`;
-      user = {
-        id: newUserId,
-        name: req.body.name || 'Campus Student',
-        email: email || 'student@university.edu',
-        profilePhoto: req.body.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        university: 'University',
-        department: 'General Studies',
-        semester: '1st Semester',
-        createdAt: new Date().toISOString(),
-        preferences: {
-          theme: 'light',
-          language: 'en',
-          currency: 'BDT',
-          currencySymbol: '৳',
-          dailyStudyGoalMinutes: 180,
-          monthlyBudgetAmount: 10000,
-          onboardingCompleted: false,
-        },
-      };
-      db.users.push(user);
-      saveDB(db);
+  if (!email) {
+    return res.status(400).json({ error: 'Email address is required.' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid email or password. Please check your credentials or sign up.' });
+  }
+
+  // Check if student account is deactivated
+  if (user.status === 'inactive') {
+    return res.status(403).json({
+      error: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
+      deactivated: true,
+    });
+  }
+
+  // Password verification
+  if (user.passwordHash && user.passwordSalt) {
+    const isMatch = verifyPassword(password || '', user.passwordHash, user.passwordSalt);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
     }
-    return res.json({ user, token: user.id });
   }
 
-  // Standard email login
-  const user = db.users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase());
-  if (user) {
-    return res.json({ user, token: user.id });
-  } else {
-    // Auto-create for friendly prototyping if not found, or prompt
-    const newUserId = `user_${Date.now()}`;
-    const newUser = {
-      id: newUserId,
-      name: email.split('@')[0],
-      email: email,
-      profilePhoto: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      university: 'My University',
-      department: 'Department',
-      semester: '1st Semester',
-      createdAt: new Date().toISOString(),
-      preferences: {
-        theme: 'light',
-        language: 'en',
-        currency: 'BDT',
-        currencySymbol: '৳',
-        dailyStudyGoalMinutes: 180,
-        monthlyBudgetAmount: 10000,
-        onboardingCompleted: false,
-      },
-    };
-    db.users.push(newUser);
-    saveDB(db);
-    return res.json({ user: newUser, token: newUser.id });
-  }
+  // Update last login timestamp
+  user.lastLoginAt = new Date().toISOString();
+  saveDB(db);
+
+  const token = createSessionToken(user.id, user.role || 'student');
+  return res.json({ user: sanitizeUser(user), token });
 });
 
-app.post('/api/auth/signup', (req, res) => {
-  const { name, email, university, department, semester } = req.body;
+// Authentication: Dedicated Admin Login
+app.post('/api/admin/login', (req, res) => {
+  const { email, password } = req.body;
   const db = loadDB();
 
-  let user = db.users.find((u) => u.email.toLowerCase() === (email || '').toLowerCase());
-  if (user) {
-    return res.json({ user, token: user.id });
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Admin email and password are required.' });
   }
 
-  const newUserId = `user_${Date.now()}`;
-  user = {
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const adminUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+
+  if (!adminUser || adminUser.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied. Valid administrator credentials required.' });
+  }
+
+  if (adminUser.status === 'inactive') {
+    return res.status(403).json({ error: 'Admin account has been disabled.' });
+  }
+
+  if (adminUser.passwordHash && adminUser.passwordSalt) {
+    const isMatch = verifyPassword(password, adminUser.passwordHash, adminUser.passwordSalt);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid admin credentials.' });
+    }
+  }
+
+  adminUser.lastLoginAt = new Date().toISOString();
+  saveDB(db);
+
+  const token = createSessionToken(adminUser.id, 'admin');
+  return res.json({ user: sanitizeUser(adminUser), token });
+});
+
+// Alias for admin login
+app.post('/api/auth/admin-login', (req, res) => {
+  return (app as any)._router.handle({ ...req, url: '/api/admin/login' }, res);
+});
+
+// Authentication: Student Sign Up
+app.post('/api/auth/signup', (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    institution,
+    university,
+    academicLevel,
+    semester,
+    department,
+    studentId,
+  } = req.body;
+  const db = loadDB();
+
+  // Validate required fields
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Full Name is required.' });
+  }
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Email address is required.' });
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!emailRegex.test(normalizedEmail)) {
+    return res.status(400).json({ error: 'Please provide a valid email address.' });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+  }
+
+  const instName = (institution || university || '').trim();
+  if (!instName) {
+    return res.status(400).json({ error: 'Institution / University Name is required.' });
+  }
+
+  const levelName = (academicLevel || semester || '').trim();
+  if (!levelName) {
+    return res.status(400).json({ error: 'Class / Grade / Year / Semester is required.' });
+  }
+
+  // Check if email already exists
+  const existingUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+  if (existingUser) {
+    return res.status(400).json({ error: 'An account with this email address already exists. Please sign in instead.' });
+  }
+
+  // Securely hash password with salt
+  const { hash, salt } = hashPassword(password);
+  const newUserId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const newUser = {
     id: newUserId,
-    name: name || 'Student',
-    email: email || `student_${Date.now()}@university.edu`,
-    profilePhoto: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-    university: university || 'University of Dhaka',
-    department: department || 'Computer Science',
-    semester: semester || '1st Semester',
+    name: name.trim(),
+    email: normalizedEmail,
+    passwordHash: hash,
+    passwordSalt: salt,
+    studentId: (studentId || '').trim(),
+    institution: instName,
+    academicLevel: levelName,
+    university: instName,
+    department: (department || 'Academic Department').trim(),
+    semester: levelName,
+    role: 'student' as const,
+    status: 'active' as const,
+    profilePhoto: '',
     createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
     preferences: {
-      theme: 'light',
-      language: 'en',
-      currency: 'BDT',
+      theme: 'light' as const,
+      language: 'en' as const,
+      currency: 'BDT' as const,
       currencySymbol: '৳',
       dailyStudyGoalMinutes: 240,
       monthlyBudgetAmount: 12000,
-      onboardingCompleted: false,
+      onboardingCompleted: true,
+      notifications: true,
+      weekStartsOn: 0,
     },
   };
-  db.users.push(user);
 
-  // Add default subjects for new user
+  db.users.push(newUser);
+
+  // Initialize clean initial default subjects for student
   const defaultSubs = [
     { id: `sub_${Date.now()}_1`, userId: newUserId, name: 'Core Major Course', icon: 'BookOpen', color: '#7C3AED', creditHours: 3, createdAt: new Date().toISOString() },
     { id: `sub_${Date.now()}_2`, userId: newUserId, name: 'General Elective', icon: 'Lightbulb', color: '#3B82F6', creditHours: 3, createdAt: new Date().toISOString() },
   ];
   db.subjects.push(...defaultSubs);
 
+  // Welcome notification
+  db.notifications.push({
+    id: `notif_${Date.now()}`,
+    userId: newUserId,
+    type: 'system',
+    title: `Welcome to Campusly, ${name.trim()}! 🎓`,
+    message: 'Your account is ready. Explore study timers, smart notes, expense tracking, and AI assistance.',
+    date: new Date().toISOString(),
+    read: false,
+    link: '/dashboard',
+  });
+
   saveDB(db);
-  return res.json({ user, token: user.id });
+
+  const token = createSessionToken(newUserId, 'student');
+  return res.status(201).json({ user: sanitizeUser(newUser), token });
 });
 
+// Alias for sign up
+app.post('/api/auth/register', (req, res) => {
+  return (app as any)._router.handle({ ...req, url: '/api/auth/signup' }, res);
+});
+
+// Current user profile lookup
 app.get('/api/auth/me', (req, res) => {
+  const auth = getAuthContext(req);
+  if (auth && auth.user) {
+    if (auth.user.status === 'inactive') {
+      return res.status(403).json({ error: 'Your account has been deactivated. Please contact the administrator.' });
+    }
+    return res.json({ user: sanitizeUser(auth.user), token: createSessionToken(auth.user.id, auth.user.role || 'student') });
+  }
+
   const userId = getUserId(req);
   const db = loadDB();
-  const user = db.users.find((u) => u.id === userId) || db.users[0];
-  res.json({ user, token: user.id });
+  const fallbackUser = db.users.find((u) => u.id === userId) || db.users[0];
+  return res.json({ user: sanitizeUser(fallbackUser), token: fallbackUser.id });
 });
 
+// Update student profile
 app.put('/api/auth/profile', (req, res) => {
   const userId = getUserId(req);
   const db = loadDB();
   const index = db.users.findIndex((u) => u.id === userId);
   if (index !== -1) {
+    const currentUser = db.users[index];
     db.users[index] = {
-      ...db.users[index],
+      ...currentUser,
       ...req.body,
+      institution: req.body.institution || req.body.university || currentUser.institution,
+      academicLevel: req.body.academicLevel || req.body.semester || currentUser.academicLevel,
+      university: req.body.university || req.body.institution || currentUser.university,
+      department: req.body.department || currentUser.department,
+      semester: req.body.semester || req.body.academicLevel || currentUser.semester,
+      studentId: req.body.studentId !== undefined ? req.body.studentId : currentUser.studentId,
       preferences: {
-        ...db.users[index].preferences,
+        ...currentUser.preferences,
         ...(req.body.preferences || {}),
       },
     };
     saveDB(db);
-    return res.json({ user: db.users[index] });
+    return res.json({ user: sanitizeUser(db.users[index]) });
   }
   res.status(404).json({ error: 'User not found' });
+});
+
+// ======================== ADMIN PORTAL ENDPOINTS ========================
+
+// Admin: System & Student Statistics
+app.get('/api/admin/stats', requireAdminMiddleware, (req, res) => {
+  const db = loadDB();
+  const students = db.users.filter((u) => u.role !== 'admin');
+  const activeStudents = students.filter((u) => u.status !== 'inactive');
+  const inactiveStudents = students.filter((u) => u.status === 'inactive');
+
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const recentRegistrationsCount = students.filter(
+    (u) => u.createdAt && now - new Date(u.createdAt).getTime() <= sevenDaysMs
+  ).length;
+  const recentActiveCount = students.filter(
+    (u) => u.lastLoginAt && now - new Date(u.lastLoginAt).getTime() <= sevenDaysMs
+  ).length;
+
+  const totalStudyMinutes = db.studySessions.reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
+  const totalStudyHours = Math.round((totalStudyMinutes / 60) * 10) / 10;
+
+  return res.json({
+    totalStudents: students.length,
+    activeStudents: activeStudents.length,
+    inactiveStudents: inactiveStudents.length,
+    recentRegistrationsCount,
+    recentActiveCount,
+    totalTasks: db.tasks.length,
+    totalStudyHours,
+    totalExpensesLogged: db.expenses.length,
+    totalPresentationsCreated: db.presentations.length,
+  });
+});
+
+// Admin: Retrieve All Registered Students (with activity counts & zero passwords)
+app.get('/api/admin/students', requireAdminMiddleware, (req, res) => {
+  const db = loadDB();
+  const searchQuery = String(req.query.q || '').trim().toLowerCase();
+  const statusFilter = String(req.query.status || 'all').trim().toLowerCase();
+
+  let students = db.users.filter((u) => u.role !== 'admin');
+
+  if (statusFilter === 'active') {
+    students = students.filter((u) => u.status !== 'inactive');
+  } else if (statusFilter === 'inactive') {
+    students = students.filter((u) => u.status === 'inactive');
+  }
+
+  if (searchQuery) {
+    students = students.filter((u) => {
+      const name = (u.name || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const studentId = (u.studentId || '').toLowerCase();
+      const institution = (u.institution || u.university || '').toLowerCase();
+      const department = (u.department || '').toLowerCase();
+      return (
+        name.includes(searchQuery) ||
+        email.includes(searchQuery) ||
+        studentId.includes(searchQuery) ||
+        institution.includes(searchQuery) ||
+        department.includes(searchQuery)
+      );
+    });
+  }
+
+  // Map to student admin records with computed stats and NO sensitive passwords
+  const result = students.map((s) => {
+    const userTasks = db.tasks.filter((t) => t.userId === s.id);
+    const userSessions = db.studySessions.filter((ss) => ss.userId === s.id);
+    const userExpenses = db.expenses.filter((e) => e.userId === s.id);
+    const userPres = db.presentations.filter((p) => p.userId === s.id);
+    const userNotes = db.notes.filter((n) => n.userId === s.id);
+
+    const studyMinutes = userSessions.reduce((acc, ss) => acc + (ss.durationMinutes || 0), 0);
+
+    return {
+      id: s.id,
+      name: s.name || 'Student',
+      email: s.email,
+      studentId: s.studentId || 'N/A',
+      institution: s.institution || s.university || 'N/A',
+      academicLevel: s.academicLevel || s.semester || 'N/A',
+      department: s.department || 'General',
+      semester: s.semester || s.academicLevel || 'N/A',
+      role: s.role || 'student',
+      status: s.status === 'inactive' ? 'inactive' : 'active',
+      profilePhoto: s.profilePhoto || '',
+      createdAt: s.createdAt || new Date().toISOString(),
+      lastLoginAt: s.lastLoginAt || s.createdAt || new Date().toISOString(),
+      stats: {
+        tasksCount: userTasks.length,
+        completedTasksCount: userTasks.filter((t) => t.completed).length,
+        studyMinutes,
+        studySessionsCount: userSessions.length,
+        expensesCount: userExpenses.length,
+        presentationsCount: userPres.length,
+        notesCount: userNotes.length,
+      },
+    };
+  });
+
+  return res.json(result);
+});
+
+// Admin: Toggle Student Active / Inactive Status
+app.patch('/api/admin/students/:id/status', requireAdminMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const db = loadDB();
+
+  if (status !== 'active' && status !== 'inactive') {
+    return res.status(400).json({ error: "Invalid status. Must be 'active' or 'inactive'." });
+  }
+
+  const userIndex = db.users.findIndex((u) => u.id === id);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'Student not found.' });
+  }
+
+  if (db.users[userIndex].role === 'admin') {
+    return res.status(400).json({ error: 'Cannot deactivate administrator account.' });
+  }
+
+  db.users[userIndex].status = status;
+  saveDB(db);
+
+  return res.json({
+    success: true,
+    student: sanitizeUser(db.users[userIndex]),
+    message: `Student account ${status === 'active' ? 'activated' : 'deactivated'} successfully.`,
+  });
+});
+
+// Admin: Delete Student Account and Isolated Data
+app.delete('/api/admin/students/:id', requireAdminMiddleware, (req, res) => {
+  const { id } = req.params;
+  const db = loadDB();
+
+  const userIndex = db.users.findIndex((u) => u.id === id);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'Student not found.' });
+  }
+
+  if (db.users[userIndex].role === 'admin') {
+    return res.status(400).json({ error: 'Cannot delete administrator account.' });
+  }
+
+  // Remove student and clean up all student-specific data
+  db.users.splice(userIndex, 1);
+  db.tasks = db.tasks.filter((t) => t.userId !== id);
+  db.expenses = db.expenses.filter((e) => e.userId !== id);
+  db.budgets = db.budgets.filter((b) => b.userId !== id);
+  db.studySessions = db.studySessions.filter((s) => s.userId !== id);
+  db.events = db.events.filter((ev) => ev.userId !== id);
+  db.presentations = db.presentations.filter((p) => p.userId !== id);
+  db.notifications = db.notifications.filter((n) => n.userId !== id);
+  db.notes = db.notes.filter((no) => no.userId !== id);
+  db.subjects = db.subjects.filter((sub) => sub.userId !== id);
+
+  saveDB(db);
+  return res.json({ success: true, message: 'Student account and data deleted successfully.' });
 });
 
 app.post('/api/auth/onboarding', (req, res) => {

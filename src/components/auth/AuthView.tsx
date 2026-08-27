@@ -4,55 +4,111 @@ import { CampuslyLogo } from '../ui/CampuslyLogo';
 import {
   GraduationCap,
   Sparkles,
-  ArrowRight,
   ShieldCheck,
   CheckCircle2,
   Lock,
   Mail,
   User,
+  Building,
+  BookOpen,
+  Hash,
+  ShieldAlert,
+  ArrowRight,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+type AuthMode = 'signin' | 'signup' | 'admin';
+
 export const AuthView: React.FC = () => {
-  const { login, register, showToast } = useApp();
+  const { login, adminLogin, register, showToast } = useApp();
 
-  const [isRegister, setIsRegister] = useState(false);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('student@university.edu');
-  const [password, setPassword] = useState('password123');
-  const [university, setUniversity] = useState('University of Dhaka');
-  const [department, setDepartment] = useState('Computer Science & Engineering');
-  const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<AuthMode>('signin');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  // Student Sign In fields
+  const [loginEmail, setLoginEmail] = useState<string>('student@university.edu');
+  const [loginPassword, setLoginPassword] = useState<string>('password123');
+
+  // Student Sign Up fields
+  const [signUpName, setSignUpName] = useState<string>('');
+  const [signUpEmail, setSignUpEmail] = useState<string>('');
+  const [signUpPassword, setSignUpPassword] = useState<string>('');
+  const [signUpInstitution, setSignUpInstitution] = useState<string>('University of Dhaka');
+  const [signUpAcademicLevel, setSignUpAcademicLevel] = useState<string>('4th Year, 8th Semester');
+  const [signUpStudentId, setSignUpStudentId] = useState<string>('STU-2026-');
+
+  // Admin Login fields
+  const [adminEmail, setAdminEmail] = useState<string>('admin@campusly.internal');
+  const [adminPassword, setAdminPassword] = useState<string>('AdminMaster2026!');
+
+  // Form submit handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     try {
-      if (isRegister) {
-        await register(name, email, password, university, department);
+      if (mode === 'signup') {
+        if (!signUpName.trim()) throw new Error('Please enter your full name.');
+        if (!signUpEmail.trim()) throw new Error('Please enter your email address.');
+        if (!signUpPassword || signUpPassword.length < 6)
+          throw new Error('Password must be at least 6 characters.');
+        if (!signUpInstitution.trim()) throw new Error('Please enter your institution/university name.');
+        if (!signUpAcademicLevel.trim())
+          throw new Error('Please enter your class / grade / academic year.');
+
+        await register({
+          name: signUpName.trim(),
+          email: signUpEmail.trim(),
+          password: signUpPassword,
+          institution: signUpInstitution.trim(),
+          academicLevel: signUpAcademicLevel.trim(),
+          studentId: signUpStudentId.trim() || undefined,
+        });
+      } else if (mode === 'admin') {
+        if (!adminEmail.trim()) throw new Error('Please enter admin email.');
+        if (!adminPassword) throw new Error('Please enter admin password.');
+
+        await adminLogin(adminEmail.trim(), adminPassword);
       } else {
-        await login(email, password);
+        if (!loginEmail.trim()) throw new Error('Please enter your email address.');
+        if (!loginPassword) throw new Error('Please enter your password.');
+
+        await login(loginEmail.trim(), loginPassword);
       }
     } catch (err: any) {
-      showToast(err.message || 'Authentication error', 'error');
+      showToast(err.message || 'Authentication failed. Please check your credentials.', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleQuickDemo = async () => {
+  const handleQuickDemoStudent = async () => {
     setIsLoading(true);
     try {
-      await login('student@university.edu', 'demo123');
+      await login('student@university.edu', 'password123', true);
     } catch (err: any) {
-      showToast('Logging into demo student...', 'info');
+      showToast(err.message || 'Demo student login error', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleQuickDemoAdmin = async () => {
+    setIsLoading(true);
+    try {
+      await adminLogin('admin@campusly.internal', 'AdminMaster2026!');
+    } catch (err: any) {
+      showToast(err.message || 'Demo admin login error', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFE] dark:bg-[#05070A] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#FDFDFE] dark:bg-[#05070A] flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center space-y-3">
         {/* Brand Icon */}
         <div className="flex justify-center">
@@ -63,166 +119,415 @@ export const AuthView: React.FC = () => {
           Campusly
         </h2>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-[#94A3B8]">
-          The AI-Powered All-in-One University Assistant
+          The AI-Powered All-in-One University Companion
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-[#0B1017] py-8 px-6 sm:px-10 rounded-3xl border border-slate-200/80 dark:border-[#1E293B] shadow-xl space-y-6">
-          {/* Quick Demo Button */}
-          <button
-            id="quick-demo-login-btn"
-            type="button"
-            onClick={handleQuickDemo}
-            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-700 hover:to-sky-700 text-white font-bold text-xs shadow-md shadow-blue-500/25 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>1-Tap Demo Student Login (No Signup Required)</span>
-          </button>
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white dark:bg-[#0B1017] py-7 px-6 sm:px-8 rounded-3xl border border-slate-200/80 dark:border-[#1E293B] shadow-xl space-y-5">
+          {/* Mode Switcher Tabs */}
+          <div className="grid grid-cols-3 p-1 bg-slate-100 dark:bg-[#131C28] rounded-2xl border border-slate-200/60 dark:border-[#1E293B]">
+            <button
+              id="tab-signin"
+              type="button"
+              onClick={() => setMode('signin')}
+              className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                mode === 'signin'
+                  ? 'bg-white dark:bg-[#1C2636] text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
 
-          <div className="relative flex py-1 items-center">
+            <button
+              id="tab-signup"
+              type="button"
+              onClick={() => setMode('signup')}
+              className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                mode === 'signup'
+                  ? 'bg-white dark:bg-[#1C2636] text-blue-600 dark:text-blue-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Sign Up</span>
+            </button>
+
+            <button
+              id="tab-admin"
+              type="button"
+              onClick={() => setMode('admin')}
+              className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                mode === 'admin'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-purple-600'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin</span>
+            </button>
+          </div>
+
+          {/* Quick Demo Action Buttons */}
+          <div className="flex gap-2">
+            <button
+              id="quick-demo-student-btn"
+              type="button"
+              onClick={handleQuickDemoStudent}
+              disabled={isLoading}
+              className="flex-1 py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>1-Tap Demo Student</span>
+            </button>
+
+            <button
+              id="quick-demo-admin-btn"
+              type="button"
+              onClick={handleQuickDemoAdmin}
+              disabled={isLoading}
+              className="py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>1-Tap Admin</span>
+            </button>
+          </div>
+
+          <div className="relative flex items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-[#1E293B]"></div>
-            <span className="flex-shrink mx-4 text-[11px] font-bold uppercase text-slate-400">or account login</span>
+            <span className="flex-shrink mx-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {mode === 'signup'
+                ? 'Create New Student Account'
+                : mode === 'admin'
+                ? 'Administrator Credentials'
+                : 'Account Credentials'}
+            </span>
             <div className="flex-grow border-t border-slate-200 dark:border-[#1E293B]"></div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isRegister && (
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            {/* STUDENT SIGN UP FORM */}
+            {mode === 'signup' && (
               <>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                    Your Full Name
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Full Name <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <User className="w-4 h-4" />
-                    </div>
+                    <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      id="auth-name-input"
+                      id="signup-name-input"
                       type="text"
                       required
-                      placeholder="e.g. Sarah Connor"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-2xl text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. Alex Johnson"
+                      value={signUpName}
+                      onChange={(e) => setSignUpName(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      University
-                    </label>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Student Email Address <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      id="auth-uni-input"
-                      type="text"
-                      placeholder="e.g. MIT, BUET"
-                      value={university}
-                      onChange={(e) => setUniversity(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-2xl text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] focus:outline-none"
+                      id="signup-email-input"
+                      type="email"
+                      required
+                      placeholder="student@university.edu"
+                      value={signUpEmail}
+                      onChange={(e) => setSignUpEmail(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                      Department
-                    </label>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Password <span className="text-rose-500">* (Min 6 chars, PBKDF2 hashed)</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      id="auth-dept-input"
-                      type="text"
-                      placeholder="e.g. CSE, BBA"
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-2xl text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] focus:outline-none"
+                      id="signup-password-input"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      placeholder="Create secure password"
+                      value={signUpPassword}
+                      onChange={(e) => setSignUpPassword(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Institution / University Name <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="signup-institution-input"
+                      type="text"
+                      required
+                      placeholder="e.g. University of Dhaka, MIT, BUET"
+                      value={signUpInstitution}
+                      onChange={(e) => setSignUpInstitution(e.target.value)}
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Class / Grade / Year <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <BookOpen className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="signup-level-input"
+                        type="text"
+                        required
+                        placeholder="e.g. 4th Year, 8th Sem"
+                        value={signUpAcademicLevel}
+                        onChange={(e) => setSignUpAcademicLevel(e.target.value)}
+                        className="w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      Student ID <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                      <Hash className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="signup-studentid-input"
+                        type="text"
+                        placeholder="e.g. STU-2026-089"
+                        value={signUpStudentId}
+                        onChange={(e) => setSignUpStudentId(e.target.value)}
+                        className="w-full pl-10 pr-3 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                   </div>
                 </div>
               </>
             )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Student Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
+            {/* STUDENT SIGN IN FORM */}
+            {mode === 'signin' && (
+              <>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="signin-email-input"
+                      type="email"
+                      required
+                      placeholder="student@university.edu"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
-                <input
-                  id="auth-email-input"
-                  type="email"
-                  required
-                  placeholder="student@university.edu"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-2xl text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Lock className="w-4 h-4" />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="signin-password-input"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
-                <input
-                  id="auth-password-input"
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-2xl text-xs font-semibold text-slate-900 dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
+              </>
+            )}
+
+            {/* ADMIN LOGIN FORM */}
+            {mode === 'admin' && (
+              <>
+                <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl text-xs text-purple-900 dark:text-purple-200">
+                  <div className="flex items-center gap-2 font-bold mb-1">
+                    <ShieldAlert className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span>Administrator Restricted Area</span>
+                  </div>
+                  <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                    Provides global student management, engagement analytics, and account moderation controls.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Admin Email
+                  </label>
+                  <div className="relative">
+                    <ShieldCheck className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-purple-500" />
+                    <input
+                      id="admin-email-input"
+                      type="email"
+                      required
+                      placeholder="admin@campusly.internal"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Admin Master Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-purple-500" />
+                    <input
+                      id="admin-password-input"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      placeholder="••••••••••••"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
             <button
-              id="auth-submit-btn"
+              id="auth-submit-button"
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl font-bold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition cursor-pointer"
+              className={`w-full py-3 text-white rounded-xl font-bold text-xs shadow-md transition active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
+                mode === 'admin'
+                  ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+              } disabled:opacity-50`}
             >
-              {isLoading
-                ? 'Authenticating...'
-                : isRegister
-                ? 'Create Student Account'
-                : 'Sign In to Campusly'}
+              {isLoading ? (
+                <span>Authenticating...</span>
+              ) : mode === 'signup' ? (
+                <>
+                  <span>Create Student Profile</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : mode === 'admin' ? (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Access Admin Console</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Campusly</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
-          <div className="text-center">
-            <button
-              id="toggle-auth-mode-btn"
-              type="button"
-              onClick={() => setIsRegister(!isRegister)}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-            >
-              {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
+          {/* Bottom Switcher */}
+          <div className="text-center pt-2 border-t border-slate-100 dark:border-[#1E293B]">
+            {mode === 'signin' && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                New student?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('signup')}
+                  className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  Create an account
+                </button>
+              </p>
+            )}
+
+            {mode === 'signup' && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Already registered?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('signin')}
+                  className="font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  Sign in here
+                </button>
+              </p>
+            )}
+
+            {mode === 'admin' && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Are you a student?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('signin')}
+                  className="font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                >
+                  Go to Student Portal
+                </button>
+              </p>
+            )}
           </div>
         </div>
 
         {/* Feature bullets */}
-        <div className="mt-8 grid grid-cols-2 gap-3 text-center text-xs text-slate-500 dark:text-[#94A3B8]">
+        <div className="mt-6 grid grid-cols-2 gap-2 text-center text-xs text-slate-500 dark:text-[#94A3B8]">
           <div className="flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>AI Slides with Speech</span>
           </div>
           <div className="flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>50/10 Pomodoro Timer</span>
           </div>
           <div className="flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>3-Sec Expense Tracker</span>
           </div>
           <div className="flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Campus Exam Calendar</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>Academic Plan & Calendar</span>
           </div>
         </div>
       </div>

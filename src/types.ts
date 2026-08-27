@@ -50,6 +50,9 @@ export type SlideLayout =
   | 'quote'
   | 'summary';
 
+export type UserRole = 'student' | 'admin';
+export type UserStatus = 'active' | 'inactive';
+
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
   language?: PresentationLanguage;
@@ -66,12 +69,55 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  studentId?: string;
+  institution?: string;
+  academicLevel?: string;
+  university?: string;
+  department?: string;
+  semester?: string;
+  role: UserRole;
+  status: UserStatus;
   profilePhoto?: string;
-  university: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  preferences: UserPreferences;
+}
+
+export interface StudentAdminRecord {
+  id: string;
+  name: string;
+  email: string;
+  studentId: string;
+  institution: string;
+  academicLevel: string;
   department: string;
   semester: string;
+  role: UserRole;
+  status: UserStatus;
+  profilePhoto?: string;
   createdAt: string;
-  preferences: UserPreferences;
+  lastLoginAt?: string;
+  stats: {
+    tasksCount: number;
+    completedTasksCount: number;
+    studyMinutes: number;
+    studySessionsCount: number;
+    expensesCount: number;
+    presentationsCount: number;
+    notesCount: number;
+  };
+}
+
+export interface AdminDashboardStats {
+  totalStudents: number;
+  activeStudents: number;
+  inactiveStudents: number;
+  recentRegistrationsCount: number;
+  recentActiveCount: number;
+  totalTasks: number;
+  totalStudyHours: number;
+  totalExpensesLogged: number;
+  totalPresentationsCreated: number;
 }
 
 export interface Subject {

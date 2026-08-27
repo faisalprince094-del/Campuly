@@ -24,6 +24,7 @@ import {
   Calendar,
   PartyPopper,
   Flame,
+  LogOut,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -34,6 +35,7 @@ export const Sidebar: React.FC = () => {
     setSubTab,
     unreadNotifsCount,
     user,
+    logout,
   } = useApp();
 
   const handleNav = (tab: MainTab, defaultSub = 'overview') => {
@@ -389,6 +391,14 @@ export const Sidebar: React.FC = () => {
                 {unreadNotifsCount}
               </span>
             )}
+          </button>
+          <button
+            id="sidebar-support-logout-btn"
+            onClick={logout}
+            className="w-full text-left text-sm text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 py-1 transition-colors font-medium flex items-center justify-between cursor-pointer mt-1 pt-1.5 border-t border-slate-200/60 dark:border-[#1E293B]"
+          >
+            <span>Sign Out</span>
+            <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
