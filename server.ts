@@ -15,28 +15,86 @@ const PORT = 3000;
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize Gemini SDK with telemetry header
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
+// Enable CORS for cross-origin preview / deployment environments
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
 });
 
-// Centralized Gemini Model Configuration with fallback resilience
-const GEMINI_MODELS = ['gemini-3.7-flash', 'gemini-3.1-flash-lite'];
-const GEMINI_MODEL = GEMINI_MODELS[0];
+// Normalize /api prefix for serverless environments (e.g., Vercel rewrites)
+app.use((req, res, next) => {
+  const url = req.url || '';
+  if (
+    !url.startsWith('/api') &&
+    (url.startsWith('/ai/') ||
+      url.startsWith('/auth/') ||
+      url.startsWith('/tasks') ||
+      url.startsWith('/expenses') ||
+      url.startsWith('/budget') ||
+      url.startsWith('/study-') ||
+      url.startsWith('/presentations') ||
+      url.startsWith('/notifications') ||
+      url.startsWith('/notes') ||
+      url.startsWith('/dashboard') ||
+      url.startsWith('/subjects') ||
+      url.startsWith('/events') ||
+      url.startsWith('/health'))
+  ) {
+    req.url = `/api${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+  next();
+});
 
-async function generateGeminiContentWithFallback(params: {
+// Resilient API Key Resolver supporting multiple common Vercel/Production env var aliases
+export function getGeminiApiKey(): string {
+  const rawKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    '';
+  return rawKey.trim().replace(/^["']|["']$/g, '');
+}
+
+// Lazy Gemini SDK client factory with user-agent telemetry header
+export function getGeminiClient(): GoogleGenAI {
+  const apiKey = getGeminiApiKey();
+  return new GoogleGenAI({
+    apiKey: apiKey || '',
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+// Centralized Gemini Model Configuration with fallback resilience
+export const GEMINI_MODELS = ['gemini-3.7-flash', 'gemini-3.1-flash-lite'];
+export const GEMINI_MODEL = GEMINI_MODELS[0];
+
+export async function generateGeminiContentWithFallback(params: {
   contents: any;
   config?: any;
 }) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'GEMINI_API_KEY is not configured on the server. Please add your Gemini API key in your Vercel Project Settings > Environment Variables as GEMINI_API_KEY.'
+    );
+  }
+
+  const client = getGeminiClient();
   let lastError: any = null;
+
   for (const modelName of GEMINI_MODELS) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: modelName,
         contents: params.contents,
         config: params.config,
@@ -52,9 +110,15 @@ async function generateGeminiContentWithFallback(params: {
   throw lastError || new Error('Failed to generate response with Gemini');
 }
 
-// Database storage setup
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Database storage setup - serverless safe (read-only filesystem proof)
+const isServerlessEnv = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT
+);
+const DATA_DIR = isServerlessEnv ? path.join('/tmp', 'campusly_data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'campusly.json');
+
+// In-memory cache for ultra-fast response and serverless resiliency
+let inMemoryDB: DatabaseSchema | null = null;
 
 interface DatabaseSchema {
   users: any[];
@@ -109,19 +173,17 @@ const getInitialSeed = (): DatabaseSchema => {
   };
 };
 
-// Ensure data folder and file exist
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
 function loadDB(): DatabaseSchema {
+  if (inMemoryDB) {
+    return inMemoryDB;
+  }
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(data);
       // Ensure all collections exist
       const defaultSeed = getInitialSeed();
-      return {
+      inMemoryDB = {
         users: parsed.users || defaultSeed.users,
         subjects: parsed.subjects || defaultSeed.subjects,
         tasks: parsed.tasks || defaultSeed.tasks,
@@ -134,20 +196,27 @@ function loadDB(): DatabaseSchema {
         notes: parsed.notes || defaultSeed.notes,
         aiFeedback: parsed.aiFeedback || defaultSeed.aiFeedback,
       };
+      return inMemoryDB;
     }
   } catch (err) {
-    console.error('Error reading database file, resetting to initial seed:', err);
+    console.warn('Note: Operating with in-memory DB seed:', err);
   }
   const seed = getInitialSeed();
+  inMemoryDB = seed;
   saveDB(seed);
   return seed;
 }
 
 function saveDB(db: DatabaseSchema) {
+  inMemoryDB = db;
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Error saving database file:', err);
+    // In read-only serverless filesystems, disk write warnings are non-fatal
+    console.warn('Note: Unable to write to disk, preserved in memory:', err);
   }
 }
 
@@ -1174,9 +1243,7 @@ Tone: ${tone}
 Output 3-5 sentences of natural spoken speech that sounds confident, easy to read aloud, and engaging. Avoid robotic phrasing.`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) throw new Error('No API key');
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generateGeminiContentWithFallback({
       contents: prompt,
     });
     res.json({ speakerNotes: response.text?.trim() || '' });
@@ -1216,9 +1283,7 @@ Provide:
 3. insights: Array of 3 objects with { title, message, severity: ("info" | "warning" | "success") }`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) throw new Error('No API key');
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generateGeminiContentWithFallback({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -1335,9 +1400,7 @@ Return a JSON object with:
   - strategy: string (e.g. "Active recall + solve 3 past exam problems")`;
 
   try {
-    if (!process.env.GEMINI_API_KEY) throw new Error('No API key');
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generateGeminiContentWithFallback({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -1432,9 +1495,7 @@ const handleAcademicAssist = async (req: express.Request, res: express.Response)
   const systemInstruction = buildStudyAssistantSystemInstruction('study_tutor', undefined, subject, providedMaterial);
 
   try {
-    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured');
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generateGeminiContentWithFallback({
       contents: `Subject Context: ${subject}\n\nStudent Question:\n${userQuery}`,
       config: { systemInstruction },
     });
@@ -1611,7 +1672,7 @@ function formatGeminiContents(
   return contents;
 }
 
-app.post('/api/ai/study-assistant', async (req, res) => {
+const handleStudyAssistant = async (req: express.Request, res: express.Response) => {
   const {
     messages = [],
     message,
@@ -1649,10 +1710,6 @@ app.post('/api/ai/study-assistant', async (req, res) => {
   );
 
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not configured');
-    }
-
     // ==================== QUICK ACTION: MULTIPLE CHOICE QUIZ ====================
     if (action === 'make_quiz') {
       const quizPrompt = `Generate an interactive 5-question multiple choice quiz on this academic topic/context:
@@ -1809,14 +1866,17 @@ Format as JSON with:
   } catch (error: any) {
     console.error('Study Assistant Gemini error:', error?.message || error);
     return res.status(500).json({
-      reply: 'Unable to generate response right now. Please try again.',
+      reply: error?.message || 'Unable to generate response right now. Please try again.',
       error: error?.message || 'Gemini API Error',
       isError: true,
       mode,
       action,
     });
   }
-});
+};
+
+app.post('/api/ai/study-assistant', handleStudyAssistant);
+app.post('/api/ai/chat', handleStudyAssistant);
 
 // ======================== AI VOICE TRANSCRIPTION (MULTILINGUAL BENGALI / ENGLISH / BANGLISH) ========================
 app.post('/api/ai/transcribe-voice', async (req, res) => {
@@ -1826,15 +1886,10 @@ app.post('/api/ai/transcribe-voice', async (req, res) => {
       return res.status(400).json({ error: 'Audio data is required', transcript: '' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured', transcript: '' });
-    }
-
     // Clean any data URI prefix if present
     const cleanBase64 = audioBase64.replace(/^data:[^;]+;base64,/, '');
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+    const response = await generateGeminiContentWithFallback({
       contents: {
         parts: [
           {
@@ -1866,7 +1921,7 @@ Rules:
   } catch (err: any) {
     console.error('Voice transcription error:', err?.message || err);
     res.status(500).json({
-      error: 'Failed to transcribe audio',
+      error: err?.message || 'Failed to transcribe audio',
       transcript: '',
     });
   }
@@ -1918,9 +1973,15 @@ async function setupServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Campusly Server running on port ${PORT}`);
-  });
+  // Only bind port when not running inside a serverless runtime (Vercel / Lambda)
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.LAMBDA_TASK_ROOT) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Campusly Server running on port ${PORT}`);
+    });
+  }
 }
 
 setupServer();
+
+export default app;
+export { app };

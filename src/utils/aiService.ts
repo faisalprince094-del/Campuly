@@ -55,13 +55,15 @@ export const aiService = {
     } catch (err: any) {
       console.error('Study Assistant API error:', err);
       // Map error codes to friendly student guidance
-      let friendlyMessage = 'Something went wrong while generating the answer. Please try again.';
+      let friendlyMessage = err.message || 'Something went wrong while generating the answer. Please try again.';
       if (!navigator.onLine) {
         friendlyMessage = 'Please check your internet connection and try again.';
-      } else if (err.message?.includes('429') || err.message?.includes('busy')) {
-        friendlyMessage = 'The AI service is currently busy. Please wait a moment and try again.';
+      } else if (err.message?.includes('429') || err.message?.includes('busy') || err.message?.includes('quota')) {
+        friendlyMessage = 'The AI service is currently busy or rate-limited. Please wait a few moments and try again.';
       } else if (err.message?.includes('503') || err.message?.includes('unavailable')) {
-        friendlyMessage = 'The AI service is temporarily unavailable. Please try again.';
+        friendlyMessage = 'The AI service is temporarily unavailable. Please try again shortly.';
+      } else if (err.message?.includes('GEMINI_API_KEY') || err.message?.includes('API key')) {
+        friendlyMessage = 'GEMINI_API_KEY is not configured on the production server. Please check your Vercel Project Settings > Environment Variables.';
       }
       throw new Error(friendlyMessage);
     }
