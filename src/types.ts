@@ -251,6 +251,7 @@ export interface AppNotification {
   id: string;
   userId: string;
   type: 
+    | 'system'
     | 'task_reminder'
     | 'deadline_reminder'
     | 'event_reminder'

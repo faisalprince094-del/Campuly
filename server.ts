@@ -22,6 +22,12 @@ import {
   sanitizeUser,
   ensureAdminAccount,
 } from './src/server/authCore';
+import {
+  registerStudent,
+  loginStudent,
+  loginAdmin,
+  validatePassword,
+} from './src/server/dbCore';
 
 dotenv.config();
 
@@ -270,84 +276,22 @@ app.get('/api/health', (req, res) => {
 
 // Authentication: Student & Admin Login
 app.post('/api/auth/login', (req, res) => {
-  const { email, password, isGoogle, isDemo } = req.body;
-  const db = loadDB();
-
-  if (isDemo) {
-    const demoUser = db.users.find((u) => u.email === 'student@university.edu') || db.users[0];
-    const token = createSessionToken(demoUser.id, demoUser.role || 'student');
-    return res.json({ user: sanitizeUser(demoUser), token });
+  try {
+    const result = loginStudent(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Login failed.' });
   }
-
-  if (!email) {
-    return res.status(400).json({ error: 'Email address is required.' });
-  }
-
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const user = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
-
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password. Please check your credentials or sign up.' });
-  }
-
-  // Check if student account is deactivated
-  if (user.status === 'inactive') {
-    return res.status(403).json({
-      error: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
-      deactivated: true,
-    });
-  }
-
-  // Password verification
-  if (user.passwordHash && user.passwordSalt) {
-    const isMatch = verifyPassword(password || '', user.passwordHash, user.passwordSalt);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password. Please check your credentials.' });
-    }
-  }
-
-  // Update last login timestamp and increment login count
-  user.lastLoginAt = new Date().toISOString();
-  user.loginCount = (user.loginCount || 0) + 1;
-  saveDB(db);
-
-  const token = createSessionToken(user.id, user.role || 'student');
-  return res.json({ user: sanitizeUser(user), token });
 });
 
 // Authentication: Dedicated Admin Login
 app.post('/api/admin/login', (req, res) => {
-  const { email, password } = req.body;
-  const db = loadDB();
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Admin email and password are required.' });
+  try {
+    const result = loginAdmin(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Admin login failed.' });
   }
-
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const adminUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
-
-  if (!adminUser || adminUser.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied. Valid administrator credentials required.' });
-  }
-
-  if (adminUser.status === 'inactive') {
-    return res.status(403).json({ error: 'Admin account has been disabled.' });
-  }
-
-  if (adminUser.passwordHash && adminUser.passwordSalt) {
-    const isMatch = verifyPassword(password, adminUser.passwordHash, adminUser.passwordSalt);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid admin credentials.' });
-    }
-  }
-
-  adminUser.lastLoginAt = new Date().toISOString();
-  adminUser.loginCount = (adminUser.loginCount || 0) + 1;
-  saveDB(db);
-
-  const token = createSessionToken(adminUser.id, 'admin');
-  return res.json({ user: sanitizeUser(adminUser), token });
 });
 
 // Alias for admin login
@@ -357,110 +301,12 @@ app.post('/api/auth/admin-login', (req, res) => {
 
 // Authentication: Student Sign Up
 app.post('/api/auth/signup', (req, res) => {
-  const {
-    name,
-    email,
-    password,
-    institution,
-    university,
-    academicLevel,
-    semester,
-    department,
-    studentId,
-  } = req.body;
-  const db = loadDB();
-
-  // Validate required fields
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: 'Full Name is required.' });
+  try {
+    const result = registerStudent(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Sign up failed.' });
   }
-  if (!email || !email.trim()) {
-    return res.status(400).json({ error: 'Email address is required.' });
-  }
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!emailRegex.test(normalizedEmail)) {
-    return res.status(400).json({ error: 'Please provide a valid email address.' });
-  }
-  if (!password || password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
-  }
-
-  const instName = (institution || university || '').trim();
-  if (!instName) {
-    return res.status(400).json({ error: 'Institution / University Name is required.' });
-  }
-
-  const levelName = (academicLevel || semester || '').trim();
-  if (!levelName) {
-    return res.status(400).json({ error: 'Class / Grade / Year / Semester is required.' });
-  }
-
-  // Check if email already exists
-  const existingUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
-  if (existingUser) {
-    return res.status(400).json({ error: 'An account with this email address already exists. Please sign in instead.' });
-  }
-
-  // Securely hash password with salt
-  const { hash, salt } = hashPassword(password);
-  const newUserId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-  const newUser = {
-    id: newUserId,
-    name: name.trim(),
-    email: normalizedEmail,
-    passwordHash: hash,
-    passwordSalt: salt,
-    studentId: (studentId || '').trim(),
-    institution: instName,
-    academicLevel: levelName,
-    university: instName,
-    department: (department || 'Academic Department').trim(),
-    semester: levelName,
-    role: 'student' as const,
-    status: 'active' as const,
-    profilePhoto: '',
-    createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-    preferences: {
-      theme: 'light' as const,
-      language: 'en' as const,
-      currency: 'BDT' as const,
-      currencySymbol: '৳',
-      dailyStudyGoalMinutes: 240,
-      monthlyBudgetAmount: 12000,
-      onboardingCompleted: true,
-      notifications: true,
-      weekStartsOn: 0,
-    },
-  };
-
-  db.users.push(newUser);
-
-  // Initialize clean initial default subjects for student
-  const defaultSubs = [
-    { id: `sub_${Date.now()}_1`, userId: newUserId, name: 'Core Major Course', icon: 'BookOpen', color: '#7C3AED', creditHours: 3, createdAt: new Date().toISOString() },
-    { id: `sub_${Date.now()}_2`, userId: newUserId, name: 'General Elective', icon: 'Lightbulb', color: '#3B82F6', creditHours: 3, createdAt: new Date().toISOString() },
-  ];
-  db.subjects.push(...defaultSubs);
-
-  // Welcome notification
-  db.notifications.push({
-    id: `notif_${Date.now()}`,
-    userId: newUserId,
-    type: 'system',
-    title: `Welcome to Campusly, ${name.trim()}! 🎓`,
-    message: 'Your account is ready. Explore study timers, smart notes, expense tracking, and AI assistance.',
-    date: new Date().toISOString(),
-    read: false,
-    link: '/dashboard',
-  });
-
-  saveDB(db);
-
-  const token = createSessionToken(newUserId, 'student');
-  return res.status(201).json({ user: sanitizeUser(newUser), token });
 });
 
 // Alias for sign up

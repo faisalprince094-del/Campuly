@@ -36,9 +36,9 @@ export const AuthView: React.FC = () => {
   const [signUpName, setSignUpName] = useState<string>('');
   const [signUpEmail, setSignUpEmail] = useState<string>('');
   const [signUpPassword, setSignUpPassword] = useState<string>('');
-  const [signUpInstitution, setSignUpInstitution] = useState<string>('University of Dhaka');
-  const [signUpAcademicLevel, setSignUpAcademicLevel] = useState<string>('4th Year, 8th Semester');
-  const [signUpStudentId, setSignUpStudentId] = useState<string>('STU-2026-');
+  const [signUpInstitution, setSignUpInstitution] = useState<string>('');
+  const [signUpAcademicLevel, setSignUpAcademicLevel] = useState<string>('');
+  const [signUpStudentId, setSignUpStudentId] = useState<string>('');
 
   // Admin Login fields
   const [adminEmail, setAdminEmail] = useState<string>('admin@campusly.internal');
@@ -53,11 +53,16 @@ export const AuthView: React.FC = () => {
       if (mode === 'signup') {
         if (!signUpName.trim()) throw new Error('Please enter your full name.');
         if (!signUpEmail.trim()) throw new Error('Please enter your email address.');
-        if (!signUpPassword || signUpPassword.length < 6)
-          throw new Error('Password must be at least 6 characters.');
+        if (!signUpPassword || signUpPassword.length < 1 || signUpPassword.length > 6) {
+          throw new Error('Password must be between 1 and 6 characters.');
+        }
+        if (!/^[A-Za-z0-9]+$/.test(signUpPassword)) {
+          throw new Error('Password must only contain English letters (A-Z, a-z) and numbers (0-9).');
+        }
         if (!signUpInstitution.trim()) throw new Error('Please enter your institution/university name.');
-        if (!signUpAcademicLevel.trim())
+        if (!signUpAcademicLevel.trim()) {
           throw new Error('Please enter your class / grade / academic year.');
+        }
 
         await register({
           name: signUpName.trim(),
@@ -250,7 +255,7 @@ export const AuthView: React.FC = () => {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    Password <span className="text-rose-500">* (Min 6 chars, PBKDF2 hashed)</span>
+                    Password <span className="text-rose-500">* (1-6 letters or numbers)</span>
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -258,8 +263,8 @@ export const AuthView: React.FC = () => {
                       id="signup-password-input"
                       type={showPassword ? 'text' : 'password'}
                       required
-                      minLength={6}
-                      placeholder="Create secure password"
+                      maxLength={6}
+                      placeholder="1-6 characters (A-Z, a-z, 0-9)"
                       value={signUpPassword}
                       onChange={(e) => setSignUpPassword(e.target.value)}
                       className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
