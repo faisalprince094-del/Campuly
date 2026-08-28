@@ -118,12 +118,13 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Authentication: Student & Admin Login
+// Authentication: Student Login
 app.post('/api/auth/login', (req, res) => {
   try {
     const result = loginStudent(req.body);
     return res.status(result.status).json(result.data);
   } catch (err: any) {
+    console.error('[API Error] /api/auth/login failed:', err);
     return res.status(500).json({ error: err?.message || 'Login failed.' });
   }
 });
@@ -147,17 +148,6 @@ app.post('/api/auth/admin-login', (req, res) => {
   } catch (err: any) {
     console.error('[API Error] /api/auth/admin-login failed:', err);
     return res.status(500).json({ error: err?.message || 'Admin login failed.' });
-  }
-});
-
-// Authentication: Student Login
-app.post('/api/auth/login', (req, res) => {
-  try {
-    const result = loginStudent(req.body);
-    return res.status(result.status).json(result.data);
-  } catch (err: any) {
-    console.error('[API Error] /api/auth/login failed:', err);
-    return res.status(500).json({ error: err?.message || 'Login failed.' });
   }
 });
 

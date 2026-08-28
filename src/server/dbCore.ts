@@ -214,7 +214,7 @@ export function validatePassword(password: string): { valid: boolean; error?: st
  */
 export function registerStudent(rawBody: any): { status: number; data: any } {
   try {
-    const body = parseServerlessBody({ body: rawBody });
+    const body = parseServerlessBody(rawBody);
     const {
       name,
       email,
@@ -346,7 +346,7 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
  */
 export function loginStudent(rawBody: any): { status: number; data: any } {
   try {
-    const body = parseServerlessBody({ body: rawBody });
+    const body = parseServerlessBody(rawBody);
     const { email, password, isDemo } = body || {};
     const db = loadDB();
 
@@ -415,7 +415,7 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
  */
 export function loginAdmin(rawBody: any): { status: number; data: any } {
   try {
-    const body = parseServerlessBody({ body: rawBody });
+    const body = parseServerlessBody(rawBody);
     const { email, password } = body || {};
     const db = loadDB();
 
@@ -457,26 +457,28 @@ export function loginAdmin(rawBody: any): { status: number; data: any } {
 }
 
 /**
- * Standard CORS and JSON request body parsing helper for Serverless functions
+ * Standard CORS and JSON request body parsing helper for Serverless functions and Express
  */
-export function parseServerlessBody(req: any): any {
-  let body = req.body;
+export function parseServerlessBody(input: any): any {
+  if (!input) return {};
+  let body = input;
+  if (typeof input === 'object' && input !== null && 'body' in input && input.body !== undefined) {
+    body = input.body;
+  }
   if (typeof body === 'string') {
     try {
       body = JSON.parse(body);
     } catch {
-      body = {};
+      return {};
     }
-  } else if (Buffer.isBuffer(body)) {
+  } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(body)) {
     try {
       body = JSON.parse(body.toString('utf-8'));
     } catch {
-      body = {};
+      return {};
     }
-  } else if (!body) {
-    body = {};
   }
-  return body;
+  return typeof body === 'object' && body !== null ? body : {};
 }
 
 export function setCorsHeaders(res: any) {

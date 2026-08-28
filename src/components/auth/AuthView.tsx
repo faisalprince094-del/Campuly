@@ -3,7 +3,6 @@ import { useApp } from '../../context/AppContext';
 import { CampuslyLogo } from '../ui/CampuslyLogo';
 import {
   GraduationCap,
-  Sparkles,
   ShieldCheck,
   CheckCircle2,
   Lock,
@@ -28,9 +27,9 @@ export const AuthView: React.FC = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Student Sign In fields
-  const [loginEmail, setLoginEmail] = useState<string>('student@university.edu');
-  const [loginPassword, setLoginPassword] = useState<string>('password123');
+  // Student Sign In fields (clean initial state, no prefilled values)
+  const [loginEmail, setLoginEmail] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
 
   // Student Sign Up fields
   const [signUpName, setSignUpName] = useState<string>('');
@@ -40,9 +39,9 @@ export const AuthView: React.FC = () => {
   const [signUpAcademicLevel, setSignUpAcademicLevel] = useState<string>('');
   const [signUpStudentId, setSignUpStudentId] = useState<string>('');
 
-  // Admin Login fields
-  const [adminEmail, setAdminEmail] = useState<string>('admin@campusly.internal');
-  const [adminPassword, setAdminPassword] = useState<string>('AdminMaster2026!');
+  // Admin Login fields (clean initial state)
+  const [adminEmail, setAdminEmail] = useState<string>('');
+  const [adminPassword, setAdminPassword] = useState<string>('');
 
   // Form submit handler
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,8 +72,8 @@ export const AuthView: React.FC = () => {
           studentId: signUpStudentId.trim() || undefined,
         });
       } else if (mode === 'admin') {
-        if (!adminEmail.trim()) throw new Error('Please enter admin email.');
-        if (!adminPassword) throw new Error('Please enter admin password.');
+        if (!adminEmail.trim()) throw new Error('Please enter your admin email address.');
+        if (!adminPassword) throw new Error('Please enter your admin password.');
 
         await adminLogin(adminEmail.trim(), adminPassword);
       } else {
@@ -85,28 +84,6 @@ export const AuthView: React.FC = () => {
       }
     } catch (err: any) {
       showToast(err.message || 'Authentication failed. Please check your credentials.', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleQuickDemoStudent = async () => {
-    setIsLoading(true);
-    try {
-      await login('student@university.edu', 'password123', true);
-    } catch (err: any) {
-      showToast(err.message || 'Demo student login error', 'error');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleQuickDemoAdmin = async () => {
-    setIsLoading(true);
-    try {
-      await adminLogin('admin@campusly.internal', 'AdminMaster2026!');
-    } catch (err: any) {
-      showToast(err.message || 'Demo admin login error', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -130,7 +107,7 @@ export const AuthView: React.FC = () => {
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-[#0B1017] py-7 px-6 sm:px-8 rounded-3xl border border-slate-200/80 dark:border-[#1E293B] shadow-xl space-y-5">
-          {/* Mode Switcher Tabs */}
+          {/* Mode Switcher Tabs (Sign In, Sign Up, Admin) */}
           <div className="grid grid-cols-3 p-1 bg-slate-100 dark:bg-[#131C28] rounded-2xl border border-slate-200/60 dark:border-[#1E293B]">
             <button
               id="tab-signin"
@@ -175,39 +152,14 @@ export const AuthView: React.FC = () => {
             </button>
           </div>
 
-          {/* Quick Demo Action Buttons */}
-          <div className="flex gap-2">
-            <button
-              id="quick-demo-student-btn"
-              type="button"
-              onClick={handleQuickDemoStudent}
-              disabled={isLoading}
-              className="flex-1 py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>1-Tap Demo Student</span>
-            </button>
-
-            <button
-              id="quick-demo-admin-btn"
-              type="button"
-              onClick={handleQuickDemoAdmin}
-              disabled={isLoading}
-              className="py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>1-Tap Admin</span>
-            </button>
-          </div>
-
           <div className="relative flex items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-[#1E293B]"></div>
             <span className="flex-shrink mx-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               {mode === 'signup'
                 ? 'Create New Student Account'
                 : mode === 'admin'
-                ? 'Administrator Credentials'
-                : 'Account Credentials'}
+                ? 'Administrator Portal Authentication'
+                : 'Student Account Sign In'}
             </span>
             <div className="flex-grow border-t border-slate-200 dark:border-[#1E293B]"></div>
           </div>
