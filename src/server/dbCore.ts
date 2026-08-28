@@ -54,7 +54,7 @@ export const getInitialSeed = (): DatabaseSchema => {
         semester: '8th Semester',
         role: 'student',
         status: 'active',
-        profilePhoto: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        profilePhoto: '',
         createdAt: new Date('2026-01-10T10:00:00Z').toISOString(),
         lastLoginAt: new Date().toISOString(),
         loginCount: 1,
@@ -212,218 +212,248 @@ export function validatePassword(password: string): { valid: boolean; error?: st
  * Handles student sign up with secure PBKDF2 hashing, complete field validation,
  * and pristine fresh-state data initialization.
  */
-export function registerStudent(body: any): { status: number; data: any } {
-  const {
-    name,
-    email,
-    password,
-    institution,
-    university,
-    academicLevel,
-    semester,
-    department,
-    studentId,
-  } = body || {};
+export function registerStudent(rawBody: any): { status: number; data: any } {
+  try {
+    const body = parseServerlessBody({ body: rawBody });
+    const {
+      name,
+      email,
+      password,
+      institution,
+      university,
+      academicLevel,
+      semester,
+      department,
+      studentId,
+    } = body || {};
 
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return { status: 400, data: { error: 'Full Name is required.' } };
-  }
+    console.log('[Auth API] registerStudent called for email:', email ? String(email).trim() : 'missing');
 
-  if (!email || typeof email !== 'string' || !email.trim()) {
-    return { status: 400, data: { error: 'Email address is required.' } };
-  }
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return { status: 400, data: { error: 'Full Name is required.' } };
+    }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!emailRegex.test(normalizedEmail)) {
-    return { status: 400, data: { error: 'Please provide a valid email address.' } };
-  }
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return { status: 400, data: { error: 'Email address is required.' } };
+    }
 
-  // Validate Password (1-6 alphanumeric characters)
-  const pwValidation = validatePassword(password);
-  if (!pwValidation.valid) {
-    return { status: 400, data: { error: pwValidation.error } };
-  }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!emailRegex.test(normalizedEmail)) {
+      return { status: 400, data: { error: 'Please provide a valid email address.' } };
+    }
 
-  const instName = (institution || university || '').trim();
-  if (!instName) {
-    return { status: 400, data: { error: 'Institution Name is required.' } };
-  }
+    // Validate Password (1-6 alphanumeric characters)
+    const pwValidation = validatePassword(password);
+    if (!pwValidation.valid) {
+      return { status: 400, data: { error: pwValidation.error } };
+    }
 
-  const levelName = (academicLevel || semester || '').trim();
-  if (!levelName) {
-    return { status: 400, data: { error: 'Class / Grade / Year is required.' } };
-  }
+    const instName = (institution || university || '').trim();
+    if (!instName) {
+      return { status: 400, data: { error: 'Institution Name is required.' } };
+    }
 
-  const db = loadDB();
+    const levelName = (academicLevel || semester || '').trim();
+    if (!levelName) {
+      return { status: 400, data: { error: 'Class / Grade / Year is required.' } };
+    }
 
-  // Check if email already registered
-  const existingUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
-  if (existingUser) {
+    const db = loadDB();
+
+    // Check if email already registered
+    const existingUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+    if (existingUser) {
+      return {
+        status: 400,
+        data: { error: 'An account with this email address already exists. Please sign in instead.' },
+      };
+    }
+
+    // Securely hash password with random salt using PBKDF2 (SHA-512)
+    const { hash, salt } = hashPassword(password);
+    const newUserId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    const newUser = {
+      id: newUserId,
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash: hash,
+      passwordSalt: salt,
+      studentId: (studentId || '').trim(),
+      institution: instName,
+      academicLevel: levelName,
+      university: instName,
+      department: (department || 'General Studies').trim(),
+      semester: levelName,
+      role: 'student' as const,
+      status: 'active' as const,
+      profilePhoto: '',
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+      loginCount: 1,
+      preferences: {
+        theme: 'light' as const,
+        language: 'en' as const,
+        currency: 'BDT' as const,
+        currencySymbol: '৳',
+        dailyStudyGoalMinutes: 240,
+        monthlyBudgetAmount: 0,
+        onboardingCompleted: true,
+        notifications: true,
+        weekStartsOn: 0,
+      },
+    };
+
+    db.users.push(newUser);
+
+    // New students start with 0 tasks, 0 expenses, 0 wallet transactions, 0 study sessions, 0 events!
+    // Welcome notification only
+    db.notifications.push({
+      id: `notif_${Date.now()}`,
+      userId: newUserId,
+      type: 'system',
+      title: `Welcome to Campusly, ${name.trim()}! 🎓`,
+      message: 'Your student account is active. Explore smart study timers, AI assistance, notes, and academic planning.',
+      date: new Date().toISOString(),
+      read: false,
+      link: '/dashboard',
+    });
+
+    saveDB(db);
+
+    const token = createSessionToken(newUserId, 'student');
+    console.log('[Auth API] Student registered successfully:', newUserId);
     return {
-      status: 400,
-      data: { error: 'An account with this email address already exists. Please sign in instead.' },
+      status: 201,
+      data: {
+        user: sanitizeUser(newUser),
+        token,
+        message: 'Account created successfully.',
+      },
+    };
+  } catch (err: any) {
+    console.error('[Auth API Error] registerStudent exception:', err);
+    return {
+      status: 500,
+      data: { error: err?.message || 'Failed to create account due to a server error.' },
     };
   }
-
-  // Securely hash password with random salt using PBKDF2 (SHA-512)
-  const { hash, salt } = hashPassword(password);
-  const newUserId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-  const newUser = {
-    id: newUserId,
-    name: name.trim(),
-    email: normalizedEmail,
-    passwordHash: hash,
-    passwordSalt: salt,
-    studentId: (studentId || '').trim(),
-    institution: instName,
-    academicLevel: levelName,
-    university: instName,
-    department: (department || 'General Studies').trim(),
-    semester: levelName,
-    role: 'student' as const,
-    status: 'active' as const,
-    profilePhoto: '',
-    createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-    loginCount: 1,
-    preferences: {
-      theme: 'light' as const,
-      language: 'en' as const,
-      currency: 'BDT' as const,
-      currencySymbol: '৳',
-      dailyStudyGoalMinutes: 240,
-      monthlyBudgetAmount: 0,
-      onboardingCompleted: true,
-      notifications: true,
-      weekStartsOn: 0,
-    },
-  };
-
-  db.users.push(newUser);
-
-  // New students start with 0 tasks, 0 expenses, 0 wallet transactions, 0 study sessions, 0 events!
-  // Welcome notification only
-  db.notifications.push({
-    id: `notif_${Date.now()}`,
-    userId: newUserId,
-    type: 'system',
-    title: `Welcome to Campusly, ${name.trim()}! 🎓`,
-    message: 'Your student account is active. Explore smart study timers, AI assistance, notes, and academic planning.',
-    date: new Date().toISOString(),
-    read: false,
-    link: '/dashboard',
-  });
-
-  saveDB(db);
-
-  const token = createSessionToken(newUserId, 'student');
-  return {
-    status: 201,
-    data: {
-      user: sanitizeUser(newUser),
-      token,
-      message: 'Account created successfully.',
-    },
-  };
 }
 
 /**
  * Handles student login with PBKDF2 password verification.
  */
-export function loginStudent(body: any): { status: number; data: any } {
-  const { email, password, isDemo } = body || {};
-  const db = loadDB();
+export function loginStudent(rawBody: any): { status: number; data: any } {
+  try {
+    const body = parseServerlessBody({ body: rawBody });
+    const { email, password, isDemo } = body || {};
+    const db = loadDB();
 
-  if (isDemo) {
-    const demoUser = db.users.find((u) => u.email === 'student@university.edu') || db.users[0];
-    const token = createSessionToken(demoUser.id, demoUser.role || 'student');
-    return { status: 200, data: { user: sanitizeUser(demoUser), token } };
-  }
+    if (isDemo) {
+      const demoUser = db.users.find((u) => u.email === 'student@university.edu') || db.users[0];
+      const token = createSessionToken(demoUser.id, demoUser.role || 'student');
+      return { status: 200, data: { user: sanitizeUser(demoUser), token } };
+    }
 
-  if (!email || typeof email !== 'string' || !email.trim()) {
-    return { status: 400, data: { error: 'Email address is required.' } };
-  }
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return { status: 400, data: { error: 'Email address is required.' } };
+    }
 
-  if (!password || typeof password !== 'string') {
-    return { status: 400, data: { error: 'Password is required.' } };
-  }
+    if (!password || typeof password !== 'string') {
+      return { status: 400, data: { error: 'Password is required.' } };
+    }
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
 
-  if (!user) {
-    return {
-      status: 401,
-      data: { error: 'Invalid email or password. Please check your credentials or sign up.' },
-    };
-  }
-
-  if (user.status === 'inactive') {
-    return {
-      status: 403,
-      data: {
-        error: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
-        deactivated: true,
-      },
-    };
-  }
-
-  // Verify PBKDF2 hashed password
-  if (user.passwordHash && user.passwordSalt) {
-    const isMatch = verifyPassword(password, user.passwordHash, user.passwordSalt);
-    if (!isMatch) {
+    if (!user) {
       return {
         status: 401,
-        data: { error: 'Invalid email or password. Please check your credentials.' },
+        data: { error: 'Invalid email or password. Please check your credentials or sign up.' },
       };
     }
+
+    if (user.status === 'inactive') {
+      return {
+        status: 403,
+        data: {
+          error: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
+          deactivated: true,
+        },
+      };
+    }
+
+    // Verify PBKDF2 hashed password
+    if (user.passwordHash && user.passwordSalt) {
+      const isMatch = verifyPassword(password, user.passwordHash, user.passwordSalt);
+      if (!isMatch) {
+        return {
+          status: 401,
+          data: { error: 'Invalid email or password. Please check your credentials.' },
+        };
+      }
+    }
+
+    user.lastLoginAt = new Date().toISOString();
+    user.loginCount = (user.loginCount || 0) + 1;
+    saveDB(db);
+
+    const token = createSessionToken(user.id, user.role || 'student');
+    return { status: 200, data: { user: sanitizeUser(user), token } };
+  } catch (err: any) {
+    console.error('[Auth API Error] loginStudent exception:', err);
+    return {
+      status: 500,
+      data: { error: err?.message || 'Login failed due to a server error.' },
+    };
   }
-
-  user.lastLoginAt = new Date().toISOString();
-  user.loginCount = (user.loginCount || 0) + 1;
-  saveDB(db);
-
-  const token = createSessionToken(user.id, user.role || 'student');
-  return { status: 200, data: { user: sanitizeUser(user), token } };
 }
 
 /**
  * Handles administrator login
  */
-export function loginAdmin(body: any): { status: number; data: any } {
-  const { email, password } = body || {};
-  const db = loadDB();
+export function loginAdmin(rawBody: any): { status: number; data: any } {
+  try {
+    const body = parseServerlessBody({ body: rawBody });
+    const { email, password } = body || {};
+    const db = loadDB();
 
-  if (!email || !password) {
-    return { status: 400, data: { error: 'Admin email and password are required.' } };
-  }
-
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const adminUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
-
-  if (!adminUser || adminUser.role !== 'admin') {
-    return { status: 403, data: { error: 'Access denied. Valid administrator credentials required.' } };
-  }
-
-  if (adminUser.status === 'inactive') {
-    return { status: 403, data: { error: 'Admin account has been disabled.' } };
-  }
-
-  if (adminUser.passwordHash && adminUser.passwordSalt) {
-    const isMatch = verifyPassword(String(password), adminUser.passwordHash, adminUser.passwordSalt);
-    if (!isMatch) {
-      return { status: 401, data: { error: 'Invalid admin credentials.' } };
+    if (!email || !password) {
+      return { status: 400, data: { error: 'Admin email and password are required.' } };
     }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const adminUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
+
+    if (!adminUser || adminUser.role !== 'admin') {
+      return { status: 403, data: { error: 'Access denied. Valid administrator credentials required.' } };
+    }
+
+    if (adminUser.status === 'inactive') {
+      return { status: 403, data: { error: 'Admin account has been disabled.' } };
+    }
+
+    if (adminUser.passwordHash && adminUser.passwordSalt) {
+      const isMatch = verifyPassword(String(password), adminUser.passwordHash, adminUser.passwordSalt);
+      if (!isMatch) {
+        return { status: 401, data: { error: 'Invalid admin credentials.' } };
+      }
+    }
+
+    adminUser.lastLoginAt = new Date().toISOString();
+    adminUser.loginCount = (adminUser.loginCount || 0) + 1;
+    saveDB(db);
+
+    const token = createSessionToken(adminUser.id, 'admin');
+    return { status: 200, data: { user: sanitizeUser(adminUser), token } };
+  } catch (err: any) {
+    console.error('[Auth API Error] loginAdmin exception:', err);
+    return {
+      status: 500,
+      data: { error: err?.message || 'Admin login failed due to a server error.' },
+    };
   }
-
-  adminUser.lastLoginAt = new Date().toISOString();
-  adminUser.loginCount = (adminUser.loginCount || 0) + 1;
-  saveDB(db);
-
-  const token = createSessionToken(adminUser.id, 'admin');
-  return { status: 200, data: { user: sanitizeUser(adminUser), token } };
 }
 
 /**

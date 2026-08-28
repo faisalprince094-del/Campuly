@@ -127,7 +127,7 @@ export const ProfilePage: React.FC = () => {
   const handleRemovePhoto = () => {
     setStagedPhoto(null);
     setUploadError(null);
-    showToast('Photo removed. Default avatar will be restored when saved.', 'info');
+    showToast('Photo removed. Clean placeholder will be restored when saved.', 'info');
   };
 
   // Save changes to profile

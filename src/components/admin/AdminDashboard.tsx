@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { apiRequest } from '../../utils/api';
 import { StudentAdminRecord, AdminDashboardStats } from '../../types';
 import { CampuslyLogo } from '../ui/CampuslyLogo';
+import { UserAvatar } from '../ui/UserAvatar';
 import {
   Users,
   Shield,
@@ -471,17 +472,12 @@ export const AdminDashboard: React.FC = () => {
                       {/* Student Info */}
                       <td className="py-3.5 px-4 sm:px-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 font-black text-xs flex items-center justify-center flex-shrink-0 border border-purple-200 dark:border-purple-800">
-                            {student.profilePhoto ? (
-                              <img
-                                src={student.profilePhoto}
-                                alt={student.name}
-                                className="w-full h-full rounded-xl object-cover"
-                              />
-                            ) : (
-                              (student.name || 'S').charAt(0).toUpperCase()
-                            )}
-                          </div>
+                          <UserAvatar
+                            src={student.profilePhoto}
+                            name={student.name}
+                            size="sm"
+                            ring={false}
+                          />
                           <div>
                             <div className="font-bold text-slate-900 dark:text-white">
                               {student.name}
@@ -621,9 +617,12 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-6 space-y-5 text-xs">
                 {/* Header Card */}
                 <div className="flex items-center gap-4 bg-slate-50 dark:bg-[#101823] p-4 rounded-2xl border border-slate-200/80 dark:border-[#1E293B]">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 font-black text-sm flex items-center justify-center flex-shrink-0">
-                    {(selectedStudent.name || 'S').charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar
+                    src={selectedStudent.profilePhoto}
+                    name={selectedStudent.name}
+                    size="lg"
+                    ring={false}
+                  />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <h4 className="font-black text-base text-slate-900 dark:text-white">

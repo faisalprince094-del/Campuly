@@ -26,9 +26,16 @@ export interface StoredUser extends User {
  * Generates a cryptographically secure PBKDF2 hash using SHA-512 and a random 16-byte salt.
  */
 export function hashPassword(password: string): { hash: string; salt: string } {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-  return { hash, salt };
+  try {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(String(password), salt, 100000, 64, 'sha512').toString('hex');
+    return { hash, salt };
+  } catch (err) {
+    console.error('[AuthCore] Error during pbkdf2 hashing, using HMAC fallback:', err);
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.createHmac('sha256', AUTH_SECRET).update(`${password}:${salt}`).digest('hex');
+    return { hash, salt };
+  }
 }
 
 /**
@@ -37,15 +44,26 @@ export function hashPassword(password: string): { hash: string; salt: string } {
 export function verifyPassword(password: string, storedHash: string, storedSalt: string): boolean {
   if (!password || !storedHash || !storedSalt) return false;
   try {
-    const candidateHash = crypto.pbkdf2Sync(password, storedSalt, 100000, 64, 'sha512').toString('hex');
+    const candidateHash = crypto.pbkdf2Sync(String(password), storedSalt, 100000, 64, 'sha512').toString('hex');
     const bufA = Buffer.from(candidateHash, 'hex');
     const bufB = Buffer.from(storedHash, 'hex');
-    if (bufA.length !== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
+    if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+      return true;
+    }
   } catch (err) {
-    console.error('[AuthCore] Error during password verification:', err);
-    return false;
+    console.error('[AuthCore] Error during pbkdf2 password verification:', err);
   }
+
+  try {
+    const fallbackHash = crypto.createHmac('sha256', AUTH_SECRET).update(`${password}:${storedSalt}`).digest('hex');
+    if (fallbackHash === storedHash) {
+      return true;
+    }
+  } catch (err) {
+    console.error('[AuthCore] Error during fallback password verification:', err);
+  }
+
+  return false;
 }
 
 /**
@@ -175,7 +193,7 @@ export function ensureAdminAccount(usersList: any[]): boolean {
       role: 'admin' as UserRole,
       status: 'active' as UserStatus,
       loginCount: 1,
-      profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      profilePhoto: '',
       createdAt: new Date('2026-01-01T00:00:00Z').toISOString(),
       lastLoginAt: new Date().toISOString(),
       preferences: {

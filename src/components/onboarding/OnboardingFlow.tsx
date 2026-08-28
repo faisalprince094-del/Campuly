@@ -16,14 +16,14 @@ export const OnboardingFlow: React.FC = () => {
   const { user, completeOnboarding, addSubject, updateBudget } = useApp();
 
   const [step, setStep] = useState(1);
-  const [university, setUniversity] = useState(user?.university || 'University of Dhaka');
-  const [department, setDepartment] = useState(user?.department || 'Computer Science & Engineering');
-  const [semester, setSemester] = useState(user?.semester || '5th Semester');
-  const [subjectsList, setSubjectsList] = useState<string[]>(['Database Systems', 'Algorithms', 'Web Engineering']);
+  const [university, setUniversity] = useState(user?.institution || user?.university || '');
+  const [department, setDepartment] = useState(user?.department || '');
+  const [semester, setSemester] = useState(user?.academicLevel || user?.semester || '');
+  const [subjectsList, setSubjectsList] = useState<string[]>([]);
   const [newSubInput, setNewSubInput] = useState('');
-  const [monthlyBudget, setMonthlyBudget] = useState(8000);
-  const [currencySymbol, setCurrencySymbol] = useState('৳');
-  const [studyGoal, setStudyGoal] = useState(240);
+  const [monthlyBudget, setMonthlyBudget] = useState(user?.preferences?.monthlyBudgetAmount || 0);
+  const [currencySymbol, setCurrencySymbol] = useState(user?.preferences?.currencySymbol || '৳');
+  const [studyGoal, setStudyGoal] = useState(user?.preferences?.dailyStudyGoalMinutes || 240);
 
   const handleFinish = async () => {
     try {

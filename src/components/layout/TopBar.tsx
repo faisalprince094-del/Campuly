@@ -115,17 +115,17 @@ export const TopBar: React.FC = () => {
           >
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
-                {user?.name || 'Faisal Ahmed'}
+                {user?.name || 'Student'}
               </p>
               <p className="text-xs text-slate-500 dark:text-[#94A3B8]">
-                {user?.university || 'BRAC University'}
+                {user?.institution || user?.university || 'Campusly'}
               </p>
             </div>
             <UserAvatar
               src={user?.profilePhoto}
               name={user?.name || 'Student'}
               size="md"
-              className="w-10 h-10 ring-2 ring-blue-600/20"
+              className="w-10 h-10"
             />
           </div>
         </div>

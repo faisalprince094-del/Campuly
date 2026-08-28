@@ -26,6 +26,11 @@ import {
   loginStudent,
   loginAdmin,
   validatePassword,
+  loadDB,
+  saveDB,
+  getUserIdFromRequest,
+  getAuthContextFromRequest,
+  DatabaseSchema,
 } from './src/server/dbCore';
 
 dotenv.config();
@@ -36,6 +41,7 @@ const _dirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 const PORT = 3000;
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Enable CORS for cross-origin preview / deployment environments
 app.use((req, res, next) => {
@@ -85,174 +91,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database storage setup - serverless safe (read-only filesystem proof)
-const isServerlessEnv = Boolean(
-  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT
-);
-const DATA_DIR = isServerlessEnv ? path.join('/tmp', 'campusly_data') : path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'campusly.json');
-
-// In-memory cache for ultra-fast response and serverless resiliency
-let inMemoryDB: DatabaseSchema | null = null;
-
-interface DatabaseSchema {
-  users: any[];
-  subjects: any[];
-  tasks: any[];
-  expenses: any[];
-  budgets: any[];
-  studySessions: any[];
-  events: any[];
-  presentations: any[];
-  notifications: any[];
-  notes: any[];
-  aiFeedback: any[];
-}
-
-// Initial seed data generator for clean default database
-const getInitialSeed = (): DatabaseSchema => {
-  const demoUserId = 'user_demo_101';
-  const demoHash = hashPassword('password123');
-
-  const seed: DatabaseSchema = {
-    users: [
-      {
-        id: demoUserId,
-        name: 'Demo Student',
-        email: 'student@university.edu',
-        passwordHash: demoHash.hash,
-        passwordSalt: demoHash.salt,
-        studentId: 'STU-2026-001',
-        institution: 'University of Dhaka',
-        academicLevel: '4th Year, 8th Semester',
-        university: 'University of Dhaka',
-        department: 'Computer Science & Engineering',
-        semester: '8th Semester',
-        role: 'student',
-        status: 'active',
-        profilePhoto: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        createdAt: new Date('2026-01-10T10:00:00Z').toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        preferences: {
-          theme: 'light',
-          language: 'en',
-          currency: 'BDT',
-          currencySymbol: '৳',
-          dailyStudyGoalMinutes: 240,
-          monthlyBudgetAmount: 12000,
-          onboardingCompleted: true,
-        },
-      },
-    ],
-    subjects: [],
-    tasks: [],
-    expenses: [],
-    budgets: [],
-    studySessions: [],
-    events: [],
-    presentations: [],
-    notifications: [],
-    notes: [],
-    aiFeedback: [],
-  };
-
-  ensureAdminAccount(seed.users);
-  return seed;
-};
-
-function loadDB(): DatabaseSchema {
-  if (inMemoryDB) {
-    ensureAdminAccount(inMemoryDB.users);
-    return inMemoryDB;
-  }
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf-8');
-      const parsed = JSON.parse(data);
-      const defaultSeed = getInitialSeed();
-      inMemoryDB = {
-        users: parsed.users || defaultSeed.users,
-        subjects: parsed.subjects || defaultSeed.subjects,
-        tasks: parsed.tasks || defaultSeed.tasks,
-        expenses: parsed.expenses || defaultSeed.expenses,
-        budgets: parsed.budgets || defaultSeed.budgets,
-        studySessions: parsed.studySessions || defaultSeed.studySessions,
-        events: parsed.events || defaultSeed.events,
-        presentations: parsed.presentations || defaultSeed.presentations,
-        notifications: parsed.notifications || defaultSeed.notifications,
-        notes: parsed.notes || defaultSeed.notes,
-        aiFeedback: parsed.aiFeedback || defaultSeed.aiFeedback,
-      };
-      ensureAdminAccount(inMemoryDB.users);
-      return inMemoryDB;
-    }
-  } catch (err) {
-    console.warn('Note: Operating with in-memory DB seed:', err);
-  }
-  const seed = getInitialSeed();
-  inMemoryDB = seed;
-  saveDB(seed);
-  return seed;
-}
-
-function saveDB(db: DatabaseSchema) {
-  inMemoryDB = db;
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Note: Unable to write to disk, preserved in memory:', err);
-  }
-}
-
 // User context resolver
 function getUserId(req: express.Request): string {
-  const authHeader = req.headers['authorization'];
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7).trim();
-    if (token && token !== 'null' && token !== 'undefined') {
-      const verified = verifySessionToken(token);
-      if (verified && verified.userId) {
-        return verified.userId;
-      }
-      return token;
-    }
-  }
-  const queryUser = req.query.userId as string;
-  if (queryUser) return queryUser;
-  return 'user_demo_101';
+  return getUserIdFromRequest(req);
 }
 
 function getAuthContext(req: express.Request): { user: any; userId: string; role: 'student' | 'admin' } | null {
-  const authHeader = req.headers['authorization'];
-  let token = '';
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7).trim();
-  } else if (req.query.token) {
-    token = (req.query.token as string).trim();
-  }
-
-  if (!token || token === 'null' || token === 'undefined') {
-    return null;
-  }
-
-  const db = loadDB();
-  const verified = verifySessionToken(token);
-  if (verified) {
-    const user = db.users.find((u) => u.id === verified.userId);
-    if (user) {
-      return { user, userId: user.id, role: user.role || verified.role };
-    }
-  }
-
-  const directUser = db.users.find((u) => u.id === token);
-  if (directUser) {
-    return { user: directUser, userId: directUser.id, role: directUser.role || 'student' };
-  }
-
-  return null;
+  return getAuthContextFromRequest(req);
 }
 
 function requireAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -289,13 +134,31 @@ app.post('/api/admin/login', (req, res) => {
     const result = loginAdmin(req.body);
     return res.status(result.status).json(result.data);
   } catch (err: any) {
+    console.error('[API Error] /api/admin/login failed:', err);
     return res.status(500).json({ error: err?.message || 'Admin login failed.' });
   }
 });
 
 // Alias for admin login
 app.post('/api/auth/admin-login', (req, res) => {
-  return (app as any)._router.handle({ ...req, url: '/api/admin/login' }, res);
+  try {
+    const result = loginAdmin(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    console.error('[API Error] /api/auth/admin-login failed:', err);
+    return res.status(500).json({ error: err?.message || 'Admin login failed.' });
+  }
+});
+
+// Authentication: Student Login
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const result = loginStudent(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    console.error('[API Error] /api/auth/login failed:', err);
+    return res.status(500).json({ error: err?.message || 'Login failed.' });
+  }
 });
 
 // Authentication: Student Sign Up
@@ -304,13 +167,20 @@ app.post('/api/auth/signup', (req, res) => {
     const result = registerStudent(req.body);
     return res.status(result.status).json(result.data);
   } catch (err: any) {
+    console.error('[API Error] /api/auth/signup failed:', err);
     return res.status(500).json({ error: err?.message || 'Sign up failed.' });
   }
 });
 
 // Alias for sign up
 app.post('/api/auth/register', (req, res) => {
-  return (app as any)._router.handle({ ...req, url: '/api/auth/signup' }, res);
+  try {
+    const result = registerStudent(req.body);
+    return res.status(result.status).json(result.data);
+  } catch (err: any) {
+    console.error('[API Error] /api/auth/register failed:', err);
+    return res.status(500).json({ error: err?.message || 'Sign up failed.' });
+  }
 });
 
 // Current user profile lookup
@@ -1775,25 +1645,46 @@ app.post('/api/ai/feedback', (req, res) => {
 
 // ======================== VITE MIDDLEWARE & STATIC SERVING ========================
 async function setupServer() {
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  const isServerless = Boolean(
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT
+  );
 
-  // Only bind port when not running inside a serverless runtime (Vercel / Lambda)
-  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.LAMBDA_TASK_ROOT) {
+  if (!isServerless) {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        });
+        app.use(vite.middlewares);
+      } catch (e) {
+        console.warn('Vite middleware could not be loaded:', e);
+      }
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath));
+        app.get('*', (req, res) => {
+          const indexPath = path.join(distPath, 'index.html');
+          if (fs.existsSync(indexPath)) {
+            res.sendFile(indexPath);
+          } else {
+            res.status(404).send('Not Found');
+          }
+        });
+      }
+    }
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Campusly Server running on port ${PORT}`);
+    });
+  } else {
+    // In serverless, fallback unmatched API routes to a clean JSON 404
+    app.all('/api/*', (req, res) => {
+      res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
     });
   }
 }
