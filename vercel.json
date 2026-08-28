@@ -2,52 +2,12 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/admin/students/:id/status",
-      "destination": "/api/admin/student-status?id=:id"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
-      "source": "/api/admin/students/:id",
-      "destination": "/api/admin/students?id=:id"
-    },
-    {
-      "source": "/api/tasks/:id/toggle",
-      "destination": "/api/tasks?id=:id&action=toggle"
-    },
-    {
-      "source": "/api/tasks/:id",
-      "destination": "/api/tasks?id=:id"
-    },
-    {
-      "source": "/api/subjects/:id",
-      "destination": "/api/subjects?id=:id"
-    },
-    {
-      "source": "/api/expenses/:id",
-      "destination": "/api/expenses?id=:id"
-    },
-    {
-      "source": "/api/events/:id",
-      "destination": "/api/events?id=:id"
-    },
-    {
-      "source": "/api/presentations/:id/duplicate",
-      "destination": "/api/presentations?id=:id&action=duplicate"
-    },
-    {
-      "source": "/api/presentations/:id",
-      "destination": "/api/presentations?id=:id"
-    },
-    {
-      "source": "/api/notifications/:id/read",
-      "destination": "/api/notifications?id=:id&action=read"
-    },
-    {
-      "source": "/api/notifications/read-all",
-      "destination": "/api/notifications?action=readAll"
-    },
-    {
-      "source": "/api/notes/:id",
-      "destination": "/api/notes?id=:id"
+      "source": "/api",
+      "destination": "/api/index"
     },
     {
       "source": "/((?!api/|api$).*)",
