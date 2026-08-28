@@ -67,8 +67,8 @@ export const AdminDashboard: React.FC = () => {
           apiRequest<StudentAdminRecord[]>(`/api/admin/students?${queryParams.toString()}`),
         ]);
 
-        setStats(statsRes);
-        setStudents(studentsRes);
+        setStats(statsRes || null);
+        setStudents(Array.isArray(studentsRes) ? studentsRes : []);
       } catch (err: any) {
         showToast(err.message || 'Failed to load administrative records.', 'error');
       } finally {
@@ -86,16 +86,16 @@ export const AdminDashboard: React.FC = () => {
   // Derive distinct institutions and academic levels for filter dropdowns
   const availableInstitutions = useMemo(() => {
     const set = new Set<string>();
-    students.forEach((s) => {
-      if (s.institution && s.institution !== 'N/A') set.add(s.institution);
+    (students || []).forEach((s) => {
+      if (s?.institution && s.institution !== 'N/A') set.add(s.institution);
     });
     return Array.from(set);
   }, [students]);
 
   const availableLevels = useMemo(() => {
     const set = new Set<string>();
-    students.forEach((s) => {
-      if (s.academicLevel && s.academicLevel !== 'N/A') set.add(s.academicLevel);
+    (students || []).forEach((s) => {
+      if (s?.academicLevel && s.academicLevel !== 'N/A') set.add(s.academicLevel);
     });
     return Array.from(set);
   }, [students]);

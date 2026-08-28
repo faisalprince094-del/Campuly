@@ -56,7 +56,7 @@ export const FinanceSection: React.FC = () => {
   const todayIso = now.toISOString().split('T')[0];
 
   const monthExpenses = useMemo(() => {
-    return expenses.filter((e) => e.date.startsWith(currentMonthPrefix));
+    return (expenses || []).filter((e) => Boolean(e?.date && e.date.startsWith(currentMonthPrefix)));
   }, [expenses, currentMonthPrefix]);
 
   const totalMonthSpent = useMemo(() => {

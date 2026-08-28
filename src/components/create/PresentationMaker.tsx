@@ -91,8 +91,9 @@ export const PresentationMaker: React.FC = () => {
   useEffect(() => {
     if (!isFullscreen || !currentDeck) return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      const slidesLen = currentDeck?.slides?.length || 1;
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
-        setActiveSlideIndex((prev) => Math.min(prev + 1, currentDeck.slides.length - 1));
+        setActiveSlideIndex((prev) => Math.min(prev + 1, slidesLen - 1));
       } else if (e.key === 'ArrowLeft') {
         setActiveSlideIndex((prev) => Math.max(prev - 1, 0));
       } else if (e.key === 'Escape') {

@@ -34,13 +34,26 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+    const text = await response.text().catch(() => '');
+    let errorData: any = { error: 'Request failed' };
+    try {
+      if (text) errorData = JSON.parse(text);
+    } catch {
+      errorData = { error: text || `Request failed with status ${response.status}` };
+    }
     const err: any = new Error(errorData.error || `Request failed with status ${response.status}`);
     err.status = response.status;
     err.data = errorData;
     throw err;
   }
 
-  return response.json();
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return {} as T;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text as unknown as T;
+  }
 }
-

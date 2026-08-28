@@ -92,10 +92,10 @@ export const HomeDashboard: React.FC = () => {
     )[0];
   }, [presentations]);
 
-  const maxWeeklyMins = Math.max(...weeklyStudyData.data.map((d) => d.mins), 60);
+  const maxWeeklyMins = Math.max(...(weeklyStudyData?.data || []).map((d) => d.mins || 0), 60);
 
   // Subject lookup helper
-  const getSubject = (id?: string) => subjects.find((s) => s.id === id);
+  const getSubject = (id?: string) => (subjects || []).find((s) => s.id === id);
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-fadeIn">

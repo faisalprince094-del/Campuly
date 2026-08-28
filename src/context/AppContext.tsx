@@ -351,38 +351,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         apiRequest<Note[]>('/api/notes').catch(() => null),
       ]);
 
-      if (subRes) setSubjects(subRes);
-      if (taskRes) setTasks(taskRes);
-      if (expRes) setExpenses(expRes);
-      if (budRes) setBudget(budRes);
-      if (sessRes) setStudySessions(sessRes);
-      if (eveRes) setEvents(eveRes);
-      if (presRes) setPresentations(presRes);
-      if (notifRes) setNotifications(notifRes);
-      if (notesRes) setNotes(notesRes);
+      if (Array.isArray(subRes)) setSubjects(subRes);
+      if (Array.isArray(taskRes)) setTasks(taskRes);
+      if (Array.isArray(expRes)) setExpenses(expRes);
+      if (budRes && typeof budRes === 'object') setBudget(budRes);
+      if (Array.isArray(sessRes)) setStudySessions(sessRes);
+      if (Array.isArray(eveRes)) setEvents(eveRes);
+      if (Array.isArray(presRes)) setPresentations(presRes);
+      if (Array.isArray(notifRes)) setNotifications(notifRes);
+      if (Array.isArray(notesRes)) setNotes(notesRes);
     } catch {
-      // Offline / local-first mode: fallback
+      // Offline / local-first mode: fallback to local state
     }
   }, []);
 
-  // Verify session on initial app load
+  // Verify session on initial app load with safety timeout
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: any = null;
+
+    // Guaranteed fallback: unblock UI after max 2.5s even if serverless API is cold-starting
+    timeoutId = setTimeout(() => {
+      if (isMounted) {
+        setIsAuthLoading(false);
+      }
+    }, 2500);
+
     const verifyAuth = async () => {
       const savedToken = localStorage.getItem('campusly_token');
       if (savedToken && savedToken !== 'null' && savedToken !== 'undefined') {
         try {
           const res = await apiRequest<{ user: User; token: string }>('/api/auth/me');
-          if (isMounted && res.user) {
+          if (isMounted && res && res.user) {
             setUser(res.user);
-            setToken(res.token);
+            setToken(res.token || savedToken);
             if (res.user.role !== 'admin') {
               refreshAllData();
             }
           }
         } catch (err: any) {
-          console.warn('Session verification failed, logging out:', err);
-          if (isMounted) {
+          console.warn('Session verification notice:', err);
+          // Only clear if explicitly unauthorized 401/403
+          if (isMounted && (err?.status === 401 || err?.status === 403)) {
             localStorage.removeItem('campusly_token');
             localStorage.removeItem('campusly_user');
             setUser(null);
@@ -398,6 +408,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     verifyAuth();
     return () => {
       isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [refreshAllData]);
 

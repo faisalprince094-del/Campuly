@@ -63,14 +63,18 @@ export const PlannerSection: React.FC = () => {
   const dateMap = useMemo(() => {
     const map: Record<string, { tasks: Task[]; events: UniversityEvent[] }> = {};
 
-    tasks.forEach((t) => {
-      if (!map[t.dueDate]) map[t.dueDate] = { tasks: [], events: [] };
-      map[t.dueDate].tasks.push(t);
+    (tasks || []).forEach((t) => {
+      if (t?.dueDate) {
+        if (!map[t.dueDate]) map[t.dueDate] = { tasks: [], events: [] };
+        map[t.dueDate].tasks.push(t);
+      }
     });
 
-    events.forEach((e) => {
-      if (!map[e.date]) map[e.date] = { tasks: [], events: [] };
-      map[e.date].events.push(e);
+    (events || []).forEach((e) => {
+      if (e?.date) {
+        if (!map[e.date]) map[e.date] = { tasks: [], events: [] };
+        map[e.date].events.push(e);
+      }
     });
 
     return map;
