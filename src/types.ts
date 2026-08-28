@@ -80,6 +80,7 @@ export interface User {
   profilePhoto?: string;
   createdAt: string;
   lastLoginAt?: string;
+  loginCount?: number;
   preferences: UserPreferences;
 }
 
@@ -97,6 +98,7 @@ export interface StudentAdminRecord {
   profilePhoto?: string;
   createdAt: string;
   lastLoginAt?: string;
+  loginCount?: number;
   stats: {
     tasksCount: number;
     completedTasksCount: number;

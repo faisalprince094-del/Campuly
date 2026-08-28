@@ -306,8 +306,9 @@ app.post('/api/auth/login', (req, res) => {
     }
   }
 
-  // Update last login timestamp
+  // Update last login timestamp and increment login count
   user.lastLoginAt = new Date().toISOString();
+  user.loginCount = (user.loginCount || 0) + 1;
   saveDB(db);
 
   const token = createSessionToken(user.id, user.role || 'student');
@@ -342,6 +343,7 @@ app.post('/api/admin/login', (req, res) => {
   }
 
   adminUser.lastLoginAt = new Date().toISOString();
+  adminUser.loginCount = (adminUser.loginCount || 0) + 1;
   saveDB(db);
 
   const token = createSessionToken(adminUser.id, 'admin');
@@ -548,6 +550,8 @@ app.get('/api/admin/students', requireAdminMiddleware, (req, res) => {
   const db = loadDB();
   const searchQuery = String(req.query.q || '').trim().toLowerCase();
   const statusFilter = String(req.query.status || 'all').trim().toLowerCase();
+  const institutionFilter = String(req.query.institution || 'all').trim().toLowerCase();
+  const levelFilter = String(req.query.level || 'all').trim().toLowerCase();
 
   let students = db.users.filter((u) => u.role !== 'admin');
 
@@ -557,6 +561,20 @@ app.get('/api/admin/students', requireAdminMiddleware, (req, res) => {
     students = students.filter((u) => u.status === 'inactive');
   }
 
+  if (institutionFilter && institutionFilter !== 'all') {
+    students = students.filter((u) => {
+      const inst = (u.institution || u.university || '').toLowerCase();
+      return inst === institutionFilter || inst.includes(institutionFilter);
+    });
+  }
+
+  if (levelFilter && levelFilter !== 'all') {
+    students = students.filter((u) => {
+      const lvl = (u.academicLevel || u.semester || '').toLowerCase();
+      return lvl === levelFilter || lvl.includes(levelFilter);
+    });
+  }
+
   if (searchQuery) {
     students = students.filter((u) => {
       const name = (u.name || '').toLowerCase();
@@ -564,17 +582,19 @@ app.get('/api/admin/students', requireAdminMiddleware, (req, res) => {
       const studentId = (u.studentId || '').toLowerCase();
       const institution = (u.institution || u.university || '').toLowerCase();
       const department = (u.department || '').toLowerCase();
+      const level = (u.academicLevel || u.semester || '').toLowerCase();
       return (
         name.includes(searchQuery) ||
         email.includes(searchQuery) ||
         studentId.includes(searchQuery) ||
         institution.includes(searchQuery) ||
-        department.includes(searchQuery)
+        department.includes(searchQuery) ||
+        level.includes(searchQuery)
       );
     });
   }
 
-  // Map to student admin records with computed stats and NO sensitive passwords
+  // Map to student admin records with computed stats, login count and NO sensitive passwords
   const result = students.map((s) => {
     const userTasks = db.tasks.filter((t) => t.userId === s.id);
     const userSessions = db.studySessions.filter((ss) => ss.userId === s.id);
@@ -598,6 +618,7 @@ app.get('/api/admin/students', requireAdminMiddleware, (req, res) => {
       profilePhoto: s.profilePhoto || '',
       createdAt: s.createdAt || new Date().toISOString(),
       lastLoginAt: s.lastLoginAt || s.createdAt || new Date().toISOString(),
+      loginCount: typeof s.loginCount === 'number' ? s.loginCount : 1,
       stats: {
         tasksCount: userTasks.length,
         completedTasksCount: userTasks.filter((t) => t.completed).length,

@@ -423,7 +423,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (prev.mode === 'focus') {
               const newSession: StudySession = {
                 id: prev.sessionId || `session_${now}`,
-                userId: user.id,
+                userId: user?.id || 'usr_student',
                 subjectId: prev.subjectId || undefined,
                 durationSeconds: totalSecs,
                 durationMinutes: durationMins,
@@ -469,7 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timerState.isRunning, timerState.startTime, showToast, user.id]);
+  }, [timerState.isRunning, timerState.startTime, showToast, user?.id]);
 
   // Timer controls
   const startTimer = useCallback(
@@ -542,7 +542,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const durationMins = Math.max(1, Math.round(elapsedSeconds / 60));
           const newSession: StudySession = {
             id: prev.sessionId || `session_${now}`,
-            userId: user.id,
+            userId: user?.id || 'usr_student',
             subjectId: prev.subjectId || undefined,
             durationSeconds: elapsedSeconds,
             durationMinutes: durationMins,
@@ -580,7 +580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
     },
-    [showToast, user.id]
+    [showToast, user?.id]
   );
 
   const updateProfile = useCallback(async (data: Partial<User>) => {
@@ -646,7 +646,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTask = useCallback(async (taskData: Partial<Task>) => {
     const newTask: Task = {
       id: `task_${Date.now()}`,
-      userId: user.id,
+      userId: user?.id || 'usr_student',
       title: taskData.title || 'Untitled Task',
       description: taskData.description || '',
       subjectId: taskData.subjectId || undefined,
@@ -664,7 +664,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(taskData),
     }).catch(() => {});
     return newTask;
-  }, [showToast, user.id]);
+  }, [showToast, user?.id]);
 
   const toggleTask = useCallback(async (taskId: string) => {
     sounds.playTaskComplete();
@@ -698,7 +698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addExpense = useCallback(async (expenseData: Partial<Expense>) => {
     const newExpense: Expense = {
       id: `exp_${Date.now()}`,
-      userId: user.id,
+      userId: user?.id || 'usr_student',
       amount: Number(expenseData.amount) || 0,
       category: expenseData.category || 'other',
       description: expenseData.description || 'Expense',
@@ -714,7 +714,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(expenseData),
     }).catch(() => {});
     return newExpense;
-  }, [showToast, user.id]);
+  }, [showToast, user?.id]);
 
   const deleteExpense = useCallback(async (expenseId: string) => {
     setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
@@ -725,7 +725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateBudget = useCallback(async (budgetData: Partial<Budget>) => {
     const updated: Budget = {
       id: budget?.id || `budget_${Date.now()}`,
-      userId: user.id,
+      userId: user?.id || 'usr_student',
       monthlyBudget: Number(budgetData.monthlyBudget) || 12000,
       categoryBudgets: budgetData.categoryBudgets || budget?.categoryBudgets || {},
       monthYear: budgetData.monthYear || new Date().toISOString().substring(0, 7),
@@ -737,12 +737,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       body: JSON.stringify(budgetData),
     }).catch(() => {});
-  }, [budget, showToast, user.id]);
+  }, [budget, showToast, user?.id]);
 
   const addSubject = useCallback(async (subjectData: Partial<Subject>) => {
     const newSub: Subject = {
       id: `sub_${Date.now()}`,
-      userId: user.id,
+      userId: user?.id || 'usr_student',
       name: subjectData.name || 'Untitled Subject',
       code: subjectData.code || '',
       icon: subjectData.icon || 'BookOpen',
@@ -758,7 +758,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(subjectData),
     }).catch(() => {});
     return newSub;
-  }, [showToast, user.id]);
+  }, [showToast, user?.id]);
 
   const deleteSubject = useCallback(async (subjectId: string) => {
     setSubjects((prev) => prev.filter((s) => s.id !== subjectId));
@@ -769,7 +769,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addEvent = useCallback(async (eventData: Partial<UniversityEvent>) => {
     const newEv: UniversityEvent = {
       id: `event_${Date.now()}`,
-      userId: user.id,
+      userId: user?.id || 'usr_student',
       title: eventData.title || 'Untitled Event',
       date: eventData.date || new Date().toISOString().split('T')[0],
       time: eventData.time || '10:00',
@@ -787,7 +787,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(eventData),
     }).catch(() => {});
     return newEv;
-  }, [showToast, user.id]);
+  }, [showToast, user?.id]);
 
   const deleteEvent = useCallback(async (eventId: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
@@ -807,7 +807,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       saved = {
         id: `pres_${Date.now()}`,
-        userId: user.id,
+        userId: user?.id || 'usr_student',
         title: presData.title || 'Untitled Presentation',
         subtitle: presData.subtitle || '',
         topic: presData.topic || '',
@@ -832,7 +832,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify(presData),
     }).catch(() => {});
     return saved;
-  }, [presentations, showToast, user.id]);
+  }, [presentations, showToast, user?.id]);
 
   const deletePresentation = useCallback(async (id: string) => {
     setPresentations((prev) => prev.filter((p) => p.id !== id));
@@ -1015,7 +1015,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const unreadNotifsCount = notifications.filter((n) => !n.read).length;
 
-  const isAuthenticated = Boolean(user && token && user.id);
+  const isAuthenticated = Boolean(user && token && user?.id);
   const isAdmin = Boolean(user && user.role === 'admin');
 
   return (

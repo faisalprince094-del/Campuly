@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { apiRequest } from '../../utils/api';
 import { StudentAdminRecord, AdminDashboardStats } from '../../types';
@@ -13,19 +13,17 @@ import {
   UserX,
   Trash2,
   Eye,
-  CheckCircle2,
   Clock,
-  BookOpen,
-  DollarSign,
   Presentation as PresentationIcon,
-  FileText,
   Building,
   GraduationCap,
   Calendar,
   AlertTriangle,
   X,
-  ChevronRight,
   Filter,
+  Activity,
+  KeyRound,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -38,6 +36,8 @@ export const AdminDashboard: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [institutionFilter, setInstitutionFilter] = useState<string>('all');
+  const [levelFilter, setLevelFilter] = useState<string>('all');
 
   // Selected student for details inspection modal
   const [selectedStudent, setSelectedStudent] = useState<StudentAdminRecord | null>(null);
@@ -49,31 +49,56 @@ export const AdminDashboard: React.FC = () => {
   // Status updating state per student
   const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null);
 
-  const fetchAdminData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setIsLoading(true);
-    else setIsRefreshing(true);
+  const fetchAdminData = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setIsLoading(true);
+      else setIsRefreshing(true);
 
-    try {
-      const [statsRes, studentsRes] = await Promise.all([
-        apiRequest<AdminDashboardStats>('/api/admin/stats'),
-        apiRequest<StudentAdminRecord[]>(
-          `/api/admin/students?q=${encodeURIComponent(searchQuery)}&status=${statusFilter}`
-        ),
-      ]);
+      try {
+        const queryParams = new URLSearchParams({
+          q: searchQuery,
+          status: statusFilter,
+          institution: institutionFilter,
+          level: levelFilter,
+        });
 
-      setStats(statsRes);
-      setStudents(studentsRes);
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load administrative records.', 'error');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [searchQuery, statusFilter, showToast]);
+        const [statsRes, studentsRes] = await Promise.all([
+          apiRequest<AdminDashboardStats>('/api/admin/stats'),
+          apiRequest<StudentAdminRecord[]>(`/api/admin/students?${queryParams.toString()}`),
+        ]);
+
+        setStats(statsRes);
+        setStudents(studentsRes);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to load administrative records.', 'error');
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [searchQuery, statusFilter, institutionFilter, levelFilter, showToast]
+  );
 
   useEffect(() => {
     fetchAdminData();
   }, [fetchAdminData]);
+
+  // Derive distinct institutions and academic levels for filter dropdowns
+  const availableInstitutions = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      if (s.institution && s.institution !== 'N/A') set.add(s.institution);
+    });
+    return Array.from(set);
+  }, [students]);
+
+  const availableLevels = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      if (s.academicLevel && s.academicLevel !== 'N/A') set.add(s.academicLevel);
+    });
+    return Array.from(set);
+  }, [students]);
 
   const handleToggleStatus = async (student: StudentAdminRecord) => {
     const newStatus = student.status === 'active' ? 'inactive' : 'active';
@@ -139,6 +164,25 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const formatActivityTime = (isoString?: string) => {
+    if (!isoString) return 'Never';
+    try {
+      const date = new Date(isoString);
+      const diffMs = Date.now() - date.getTime();
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 2) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return 'N/A';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070A0F] text-slate-900 dark:text-slate-100 flex flex-col">
       {/* Top Admin Navigation Bar */}
@@ -196,88 +240,110 @@ export const AdminDashboard: React.FC = () => {
               Campus Overview & Student Registry
             </h1>
             <p className="text-xs sm:text-sm text-purple-200/90 mt-1 max-w-xl">
-              Monitor student engagement, verify enrollment credentials, manage accounts, and maintain campus data privacy.
+              Monitor student engagement, verify enrollment credentials, manage student accounts, and maintain campus security.
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 text-xs font-semibold">
             <UserCheck className="w-4 h-4 text-emerald-300" />
-            <span>System Status: Healthy</span>
+            <span>Server Authorization: Verified Admin</span>
           </div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-[#0B1017] p-5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+          {/* Total Students */}
+          <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Total Students
               </span>
-              <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+              <div className="p-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+            <div className="text-2xl font-black text-slate-900 dark:text-white">
               {stats ? stats.totalStudents : '—'}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              +{stats?.recentRegistrationsCount || 0} enrolled this week
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+              Registered student base
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#0B1017] p-5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {/* Active Students */}
+          <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Active Accounts
               </span>
-              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+              <div className="p-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
                 <UserCheck className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
               {stats ? stats.activeStudents : '—'}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
               {stats?.inactiveStudents || 0} suspended / inactive
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#0B1017] p-5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Total Study Time
+          {/* Recently Active Students */}
+          <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Recently Active
               </span>
-              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
-                <Clock className="w-4 h-4" />
+              <div className="p-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+                <Activity className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              {stats ? `${stats.totalStudyHours}h` : '—'}
+            <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+              {stats ? stats.recentActiveCount : '—'}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Focused student hours logged
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+              Logged in within 7 days
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#0B1017] p-5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Academic Artifacts
+          {/* New Signups */}
+          <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                New This Week
               </span>
-              <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
-                <PresentationIcon className="w-4 h-4" />
+              <div className="p-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+                <GraduationCap className="w-4 h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              {stats ? `${stats.totalTasks + stats.totalPresentationsCreated}` : '—'}
+            <div className="text-2xl font-black text-purple-600 dark:text-purple-400">
+              {stats ? `+${stats.recentRegistrationsCount}` : '—'}
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              {stats?.totalPresentationsCreated || 0} slide decks · {stats?.totalTasks || 0} tasks
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+              Enrolled in past 7 days
+            </p>
+          </div>
+
+          {/* Total Study Hours */}
+          <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Study Logged
+              </span>
+              <div className="p-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white">
+              {stats ? `${stats.totalStudyHours}h` : '—'}
+            </div>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+              {stats?.totalPresentationsCreated || 0} decks · {stats?.totalTasks || 0} tasks
             </p>
           </div>
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="bg-white dark:bg-[#0B1017] p-4 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div className="bg-white dark:bg-[#0B1017] p-4 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -290,7 +356,8 @@ export const AdminDashboard: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status Filter */}
             <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
               <Filter className="w-3.5 h-3.5 text-slate-400" />
               <span>Status:</span>
@@ -305,6 +372,48 @@ export const AdminDashboard: React.FC = () => {
                 <option value="inactive">Inactive Only ({stats?.inactiveStudents || 0})</option>
               </select>
             </div>
+
+            {/* Institution Filter */}
+            {availableInstitutions.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <Building className="w-3.5 h-3.5 text-slate-400" />
+                <span>Institution:</span>
+                <select
+                  id="admin-institution-filter"
+                  value={institutionFilter}
+                  onChange={(e) => setInstitutionFilter(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer max-w-[140px] truncate"
+                >
+                  <option value="all">All Institutions</option>
+                  {availableInstitutions.map((inst) => (
+                    <option key={inst} value={inst}>
+                      {inst}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Academic Level Filter */}
+            {availableLevels.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                <span>Class / Year:</span>
+                <select
+                  id="admin-level-filter"
+                  value={levelFilter}
+                  onChange={(e) => setLevelFilter(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none cursor-pointer max-w-[140px] truncate"
+                >
+                  <option value="all">All Levels</option>
+                  {availableLevels.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {lvl}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -319,9 +428,10 @@ export const AdminDashboard: React.FC = () => {
                 {students.length}
               </span>
             </div>
-            <span className="text-xs text-slate-400">
-              Passwords securely hashed & isolated (Never exposed)
-            </span>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Passwords securely hashed (Never exposed)</span>
+            </div>
           </div>
 
           {isLoading ? (
@@ -336,7 +446,7 @@ export const AdminDashboard: React.FC = () => {
                 No student accounts found.
               </span>
               <span className="text-[11px] text-slate-400">
-                {searchQuery ? 'Try adjusting your search criteria.' : 'Registered students will appear here.'}
+                {searchQuery ? 'Try adjusting your search criteria or filters.' : 'Registered students will appear here.'}
               </span>
             </div>
           ) : (
@@ -347,7 +457,7 @@ export const AdminDashboard: React.FC = () => {
                     <th className="py-3 px-4 sm:px-6">Student</th>
                     <th className="py-3 px-4">Institution & Level</th>
                     <th className="py-3 px-4">Student ID</th>
-                    <th className="py-3 px-4">Activity Stats</th>
+                    <th className="py-3 px-4">Login Activity</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -383,7 +493,7 @@ export const AdminDashboard: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Institution */}
+                      {/* Institution & Level */}
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-slate-800 dark:text-slate-200">
                           {student.institution}
@@ -400,17 +510,14 @@ export const AdminDashboard: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Stats */}
+                      {/* Login Activity */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-300 font-semibold">
-                          <span title="Tasks completed">
-                            ✅ {student.stats.completedTasksCount}/{student.stats.tasksCount}
+                        <div className="flex flex-col text-[11px]">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            Last: {formatActivityTime(student.lastLoginAt)}
                           </span>
-                          <span title="Study time">
-                            ⏱️ {Math.round((student.stats.studyMinutes / 60) * 10) / 10}h
-                          </span>
-                          <span title="Presentations">
-                            📑 {student.stats.presentationsCount}
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {student.loginCount || 1} logins recorded
                           </span>
                         </div>
                       </td>
@@ -499,7 +606,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <GraduationCap className="w-5 h-5 text-purple-600" />
                   <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                    Student Profile Details
+                    Student Profile & Auth Record
                   </h3>
                 </div>
                 <button
@@ -523,7 +630,7 @@ export const AdminDashboard: React.FC = () => {
                         {selectedStudent.name}
                       </h4>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                           selectedStudent.status === 'active'
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                             : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
@@ -536,11 +643,17 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Password Protection Badge */}
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 text-purple-800 dark:text-purple-300 text-[11px] font-semibold">
+                  <Shield className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <span>Password securely encrypted with PBKDF2 salt & hash. Zero plain text exposure.</span>
+                </div>
+
                 {/* Academic Metadata */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-slate-50 dark:bg-[#101823] rounded-xl border border-slate-200/60 dark:border-[#1E293B]">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      Institution
+                      Institution / University
                     </span>
                     <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                       {selectedStudent.institution}
@@ -558,7 +671,7 @@ export const AdminDashboard: React.FC = () => {
 
                   <div className="p-3 bg-slate-50 dark:bg-[#101823] rounded-xl border border-slate-200/60 dark:border-[#1E293B]">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      Academic Level
+                      Class / Academic Level
                     </span>
                     <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                       {selectedStudent.academicLevel}
@@ -572,6 +685,42 @@ export const AdminDashboard: React.FC = () => {
                     <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
                       {selectedStudent.department}
                     </p>
+                  </div>
+                </div>
+
+                {/* Login Activity Metrics */}
+                <div className="p-3.5 bg-slate-50 dark:bg-[#101823] rounded-2xl border border-slate-200/60 dark:border-[#1E293B] space-y-2">
+                  <h5 className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Login & Authentication Activity</span>
+                  </h5>
+                  <div className="grid grid-cols-2 gap-3 text-[11px]">
+                    <div>
+                      <span className="text-slate-400">Account Created:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">
+                        {new Date(selectedStudent.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Last Login:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">
+                        {selectedStudent.lastLoginAt
+                          ? new Date(selectedStudent.lastLoginAt).toLocaleString()
+                          : 'Never'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Total Logins Recorded:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">
+                        {selectedStudent.loginCount || 1} sessions
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Current Status:</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 capitalize">
+                        {selectedStudent.status}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -609,27 +758,34 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Timestamps */}
-                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-[#1E293B]">
-                  <span>Enrolled: {new Date(selectedStudent.createdAt).toLocaleDateString()}</span>
-                  <span>Last active: {new Date(selectedStudent.lastLoginAt).toLocaleDateString()}</span>
-                </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="px-6 py-4 bg-slate-50 dark:bg-[#101823] border-t border-slate-200 dark:border-[#1E293B] flex items-center justify-end gap-2">
+              {/* Modal Footer with Direct Status Toggle */}
+              <div className="px-6 py-4 bg-slate-50 dark:bg-[#101823] border-t border-slate-200 dark:border-[#1E293B] flex items-center justify-between gap-2">
                 <button
+                  id="modal-toggle-status-btn"
                   type="button"
+                  disabled={updatingStudentId === selectedStudent.id}
                   onClick={() => handleToggleStatus(selectedStudent)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                     selectedStudent.status === 'active'
-                      ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300'
-                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      ? 'bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
                   }`}
                 >
-                  {selectedStudent.status === 'active' ? 'Deactivate Student' : 'Activate Student'}
+                  {selectedStudent.status === 'active' ? (
+                    <>
+                      <UserX className="w-3.5 h-3.5" />
+                      <span>Deactivate Account</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Activate Account</span>
+                    </>
+                  )}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setSelectedStudent(null)}
