@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import {
@@ -31,8 +30,8 @@ import {
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Universal CJS/ESM directory resolution without using import.meta.url directly
+const _dirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 const PORT = 3000;
 const app = express();
