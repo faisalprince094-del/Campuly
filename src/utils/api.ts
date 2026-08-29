@@ -41,7 +41,8 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     } catch {
       errorData = { error: text || `Request failed with status ${response.status}` };
     }
-    const err: any = new Error(errorData.error || `Request failed with status ${response.status}`);
+    const message = errorData.message || errorData.error || `Request failed with status ${response.status}`;
+    const err: any = new Error(message);
     err.status = response.status;
     err.data = errorData;
     throw err;

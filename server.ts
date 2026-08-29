@@ -125,7 +125,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(result.status).json(result.data);
   } catch (err: any) {
     console.error('[API Error] /api/auth/login failed:', err);
-    return res.status(500).json({ error: err?.message || 'Login failed.' });
+    return res.status(500).json({ success: false, error: err?.message || 'Login failed.', message: err?.message || 'Login failed.' });
   }
 });
 
@@ -136,7 +136,7 @@ app.post('/api/admin/login', (req, res) => {
     return res.status(result.status).json(result.data);
   } catch (err: any) {
     console.error('[API Error] /api/admin/login failed:', err);
-    return res.status(500).json({ error: err?.message || 'Admin login failed.' });
+    return res.status(500).json({ success: false, error: err?.message || 'Admin login failed.', message: err?.message || 'Admin login failed.' });
   }
 });
 
@@ -147,7 +147,7 @@ app.post('/api/auth/admin-login', (req, res) => {
     return res.status(result.status).json(result.data);
   } catch (err: any) {
     console.error('[API Error] /api/auth/admin-login failed:', err);
-    return res.status(500).json({ error: err?.message || 'Admin login failed.' });
+    return res.status(500).json({ success: false, error: err?.message || 'Admin login failed.', message: err?.message || 'Admin login failed.' });
   }
 });
 
@@ -158,7 +158,7 @@ app.post('/api/auth/signup', (req, res) => {
     return res.status(result.status).json(result.data);
   } catch (err: any) {
     console.error('[API Error] /api/auth/signup failed:', err);
-    return res.status(500).json({ error: err?.message || 'Sign up failed.' });
+    return res.status(500).json({ success: false, error: err?.message || 'Sign up failed.', message: err?.message || 'Sign up failed.' });
   }
 });
 
@@ -169,7 +169,7 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(result.status).json(result.data);
   } catch (err: any) {
     console.error('[API Error] /api/auth/register failed:', err);
-    return res.status(500).json({ error: err?.message || 'Sign up failed.' });
+    return res.status(500).json({ success: false, error: err?.message || 'Sign up failed.', message: err?.message || 'Sign up failed.' });
   }
 });
 

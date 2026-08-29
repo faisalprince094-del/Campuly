@@ -10,6 +10,7 @@ import {
 } from './authCore';
 export { sanitizeUser };
 import { User, Subject, Task, Expense, Budget, StudySession, UniversityEvent, Presentation, AppNotification, Note } from '../types';
+import { getSupabaseClient } from '../utils/supabase';
 
 // Serverless-safe storage directory (/tmp is writeable in AWS Lambda / Vercel Serverless)
 const isServerlessEnv = Boolean(
@@ -210,7 +211,7 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 
 /**
  * Handles student sign up with secure PBKDF2 hashing, complete field validation,
- * and pristine fresh-state data initialization.
+ * pristine fresh-state data initialization, and Supabase database synchronization.
  */
 export function registerStudent(rawBody: any): { status: number; data: any } {
   try {
@@ -230,33 +231,33 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
     console.log('[Auth API] registerStudent called for email:', email ? String(email).trim() : 'missing');
 
     if (!name || typeof name !== 'string' || !name.trim()) {
-      return { status: 400, data: { error: 'Full Name is required.' } };
+      return { status: 400, data: { success: false, error: 'Full Name is required.', message: 'Full Name is required.' } };
     }
 
     if (!email || typeof email !== 'string' || !email.trim()) {
-      return { status: 400, data: { error: 'Email address is required.' } };
+      return { status: 400, data: { success: false, error: 'Email address is required.', message: 'Email address is required.' } };
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const normalizedEmail = email.trim().toLowerCase();
     if (!emailRegex.test(normalizedEmail)) {
-      return { status: 400, data: { error: 'Please provide a valid email address.' } };
+      return { status: 400, data: { success: false, error: 'Please provide a valid email address.', message: 'Please provide a valid email address.' } };
     }
 
     // Validate Password (1-6 alphanumeric characters)
     const pwValidation = validatePassword(password);
     if (!pwValidation.valid) {
-      return { status: 400, data: { error: pwValidation.error } };
+      return { status: 400, data: { success: false, error: pwValidation.error, message: pwValidation.error } };
     }
 
     const instName = (institution || university || '').trim();
     if (!instName) {
-      return { status: 400, data: { error: 'Institution Name is required.' } };
+      return { status: 400, data: { success: false, error: 'Institution Name is required.', message: 'Institution Name is required.' } };
     }
 
     const levelName = (academicLevel || semester || '').trim();
     if (!levelName) {
-      return { status: 400, data: { error: 'Class / Grade / Year is required.' } };
+      return { status: 400, data: { success: false, error: 'Class / Grade / Year is required.', message: 'Class / Grade / Year is required.' } };
     }
 
     const db = loadDB();
@@ -266,7 +267,11 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
     if (existingUser) {
       return {
         status: 400,
-        data: { error: 'An account with this email address already exists. Please sign in instead.' },
+        data: {
+          success: false,
+          error: 'An account with this email address already exists. Please sign in instead.',
+          message: 'An account with this email address already exists. Please sign in instead.',
+        },
       };
     }
 
@@ -288,7 +293,7 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
       semester: levelName,
       role: 'student' as const,
       status: 'active' as const,
-      profilePhoto: '',
+      profilePhoto: '', // Blank placeholder initially
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
       loginCount: 1,
@@ -307,8 +312,7 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
 
     db.users.push(newUser);
 
-    // New students start with 0 tasks, 0 expenses, 0 wallet transactions, 0 study sessions, 0 events!
-    // Welcome notification only
+    // Welcome notification for new students
     db.notifications.push({
       id: `notif_${Date.now()}`,
       userId: newUserId,
@@ -322,11 +326,47 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
 
     saveDB(db);
 
+    // Sync student record to Supabase database (non-blocking)
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        Promise.resolve(
+          supabase.from('profiles').upsert({
+            id: newUserId,
+            name: name.trim(),
+            email: normalizedEmail,
+            student_id: (studentId || '').trim(),
+            institution: instName,
+            academic_level: levelName,
+            department: (department || 'General Studies').trim(),
+            role: 'student',
+            status: 'active',
+            profile_photo: '',
+            created_at: new Date().toISOString(),
+            last_login_at: new Date().toISOString(),
+          })
+        )
+          .then((res: any) => {
+            if (res && res.error) {
+              console.warn('[Supabase Sync Notice] Profiles table upsert:', res.error.message);
+            } else {
+              console.log('[Supabase Sync] Student record synced to Supabase successfully.');
+            }
+          })
+          .catch((err: any) => {
+            console.warn('[Supabase Sync Warning]:', err?.message || err);
+          });
+      }
+    } catch (sbErr) {
+      console.warn('[Supabase Sync Handler Caught]:', sbErr);
+    }
+
     const token = createSessionToken(newUserId, 'student');
     console.log('[Auth API] Student registered successfully:', newUserId);
     return {
       status: 201,
       data: {
+        success: true,
         user: sanitizeUser(newUser),
         token,
         message: 'Account created successfully.',
@@ -336,7 +376,11 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
     console.error('[Auth API Error] registerStudent exception:', err);
     return {
       status: 500,
-      data: { error: err?.message || 'Failed to create account due to a server error.' },
+      data: {
+        success: false,
+        error: err?.message || 'Failed to create account due to a server error.',
+        message: err?.message || 'Failed to create account due to a server error.',
+      },
     };
   }
 }
@@ -353,15 +397,15 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
     if (isDemo) {
       const demoUser = db.users.find((u) => u.email === 'student@university.edu') || db.users[0];
       const token = createSessionToken(demoUser.id, demoUser.role || 'student');
-      return { status: 200, data: { user: sanitizeUser(demoUser), token } };
+      return { status: 200, data: { success: true, user: sanitizeUser(demoUser), token, message: 'Signed in successfully.' } };
     }
 
     if (!email || typeof email !== 'string' || !email.trim()) {
-      return { status: 400, data: { error: 'Email address is required.' } };
+      return { status: 400, data: { success: false, error: 'Email address is required.', message: 'Email address is required.' } };
     }
 
     if (!password || typeof password !== 'string') {
-      return { status: 400, data: { error: 'Password is required.' } };
+      return { status: 400, data: { success: false, error: 'Password is required.', message: 'Password is required.' } };
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -370,7 +414,11 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
     if (!user) {
       return {
         status: 401,
-        data: { error: 'Invalid email or password. Please check your credentials or sign up.' },
+        data: {
+          success: false,
+          error: 'Invalid email or password. Please check your credentials or sign up.',
+          message: 'Invalid email or password. Please check your credentials or sign up.',
+        },
       };
     }
 
@@ -378,7 +426,9 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
       return {
         status: 403,
         data: {
+          success: false,
           error: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
+          message: 'Your student account has been deactivated. Please contact the campus administrator for assistance.',
           deactivated: true,
         },
       };
@@ -390,7 +440,11 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
       if (!isMatch) {
         return {
           status: 401,
-          data: { error: 'Invalid email or password. Please check your credentials.' },
+          data: {
+            success: false,
+            error: 'Invalid email or password. Please check your credentials.',
+            message: 'Invalid email or password. Please check your credentials.',
+          },
         };
       }
     }
@@ -399,13 +453,40 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
     user.loginCount = (user.loginCount || 0) + 1;
     saveDB(db);
 
+    // Sync last login to Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        Promise.resolve(
+          supabase
+            .from('profiles')
+            .update({ last_login_at: user.lastLoginAt })
+            .eq('email', normalizedEmail)
+        )
+          .then(() => {})
+          .catch(() => {});
+      }
+    } catch {}
+
     const token = createSessionToken(user.id, user.role || 'student');
-    return { status: 200, data: { user: sanitizeUser(user), token } };
+    return {
+      status: 200,
+      data: {
+        success: true,
+        user: sanitizeUser(user),
+        token,
+        message: 'Signed in successfully.',
+      },
+    };
   } catch (err: any) {
     console.error('[Auth API Error] loginStudent exception:', err);
     return {
       status: 500,
-      data: { error: err?.message || 'Login failed due to a server error.' },
+      data: {
+        success: false,
+        error: err?.message || 'Login failed due to a server error.',
+        message: err?.message || 'Login failed due to a server error.',
+      },
     };
   }
 }
@@ -420,24 +501,24 @@ export function loginAdmin(rawBody: any): { status: number; data: any } {
     const db = loadDB();
 
     if (!email || !password) {
-      return { status: 400, data: { error: 'Admin email and password are required.' } };
+      return { status: 400, data: { success: false, error: 'Admin email and password are required.', message: 'Admin email and password are required.' } };
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const adminUser = db.users.find((u) => u.email && u.email.toLowerCase() === normalizedEmail);
 
     if (!adminUser || adminUser.role !== 'admin') {
-      return { status: 403, data: { error: 'Access denied. Valid administrator credentials required.' } };
+      return { status: 403, data: { success: false, error: 'Access denied. Valid administrator credentials required.', message: 'Access denied. Valid administrator credentials required.' } };
     }
 
     if (adminUser.status === 'inactive') {
-      return { status: 403, data: { error: 'Admin account has been disabled.' } };
+      return { status: 403, data: { success: false, error: 'Admin account has been disabled.', message: 'Admin account has been disabled.' } };
     }
 
     if (adminUser.passwordHash && adminUser.passwordSalt) {
       const isMatch = verifyPassword(String(password), adminUser.passwordHash, adminUser.passwordSalt);
       if (!isMatch) {
-        return { status: 401, data: { error: 'Invalid admin credentials.' } };
+        return { status: 401, data: { success: false, error: 'Invalid admin credentials.', message: 'Invalid admin credentials.' } };
       }
     }
 
@@ -446,12 +527,24 @@ export function loginAdmin(rawBody: any): { status: number; data: any } {
     saveDB(db);
 
     const token = createSessionToken(adminUser.id, 'admin');
-    return { status: 200, data: { user: sanitizeUser(adminUser), token } };
+    return {
+      status: 200,
+      data: {
+        success: true,
+        user: sanitizeUser(adminUser),
+        token,
+        message: 'Admin authenticated successfully.',
+      },
+    };
   } catch (err: any) {
     console.error('[Auth API Error] loginAdmin exception:', err);
     return {
       status: 500,
-      data: { error: err?.message || 'Admin login failed due to a server error.' },
+      data: {
+        success: false,
+        error: err?.message || 'Admin login failed due to a server error.',
+        message: err?.message || 'Admin login failed due to a server error.',
+      },
     };
   }
 }
