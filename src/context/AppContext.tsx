@@ -151,6 +151,20 @@ function setLocalItem<T>(key: string, value: T): void {
   }
 }
 
+// Check and enforce single-time legacy session reset
+if (typeof window !== 'undefined') {
+  try {
+    if (!localStorage.getItem('campusly_v2_reset')) {
+      localStorage.removeItem('campusly_current_user');
+      localStorage.removeItem('campusly_user');
+      localStorage.removeItem('campusly_token');
+      localStorage.setItem('campusly_v2_reset', 'true');
+    }
+  } catch (e) {
+    console.warn('Session reset check notice:', e);
+  }
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

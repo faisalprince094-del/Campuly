@@ -16,6 +16,7 @@ import {
   Trash2,
   AlertCircle,
   Check,
+  LogOut,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserAvatar } from '../ui/UserAvatar';
@@ -24,7 +25,7 @@ import { validateImageFile, loadFileToImage } from '../../utils/imageStorage';
 import { calculateStudyStreak } from '../../utils/studyTracker';
 
 export const ProfilePage: React.FC = () => {
-  const { user, updateProfile, studySessions, tasks, presentations, subjects, showToast } = useApp();
+  const { user, updateProfile, logout, studySessions, tasks, presentations, subjects, showToast } = useApp();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
@@ -476,6 +477,20 @@ export const ProfilePage: React.FC = () => {
             );
           })}
         </div>
+      </div>
+
+      {/* Prominent Profile Sign-Out Button (Mobile-Friendly & High Contrast) */}
+      <div className="pt-2 pb-6">
+        <button
+          id="profile-logout-btn"
+          onClick={() => {
+            logout();
+          }}
+          className="w-full py-4 px-6 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/25 border border-rose-500/30 dark:border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-xs cursor-pointer active:scale-[0.99]"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out from Campusly</span>
+        </button>
       </div>
     </div>
   );
