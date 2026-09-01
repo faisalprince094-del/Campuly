@@ -662,13 +662,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLocalItem('campusly_user', updated);
       return updated;
     });
-    // Server sync
-    apiRequest('/api/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }).catch(() => {});
+
+    // Direct Supabase profile sync
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && user?.id) {
+        supabase.from('profiles').upsert({
+          id: user.id,
+          ...(data.name ? { full_name: data.name } : {}),
+          ...(data.institution ? { university_name: data.institution } : {}),
+          ...(data.academicLevel ? { class_year: data.academicLevel } : {}),
+          ...(data.studentId !== undefined ? { student_id_number: data.studentId } : {}),
+          ...(data.profilePhoto !== undefined ? { avatar_url: data.profilePhoto } : {}),
+        }).then(({ error }) => {
+          if (error) console.warn('[Supabase Profile Update]:', error.message);
+        });
+      }
+    } catch (e) {
+      console.warn('Profile sync notice:', e);
+    }
+
     showToast('Profile updated successfully.', 'success');
-  }, [showToast]);
+  }, [showToast, user?.id]);
 
   const resetToDefaultData = useCallback(() => {
     removeAvatarFromDB().catch(() => {});
@@ -1102,6 +1117,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: sbAuthData, error: sbAuthErr } = await supabase.auth.signUp({
         email: normalizedEmail,
         password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name.trim(),
+            university_name: formData.institution.trim(),
+            class_year: formData.academicLevel.trim(),
+            student_id_number: formData.studentId?.trim() || '',
+          },
+        },
       });
 
       if (sbAuthErr) {
@@ -1116,19 +1139,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const userId = sbAuthData.user.id;
 
       // 2. Direct Profile Upsert into Supabase `profiles` table
-      const { error: profileErr } = await supabase.from('profiles').upsert({
-        id: userId,
-        full_name: formData.name.trim(),
-        email: normalizedEmail,
-        university_name: formData.institution.trim(),
-        class_year: formData.academicLevel.trim(),
-        student_id_number: formData.studentId?.trim() || '',
-        avatar_url: null,
-        role: 'student',
-      });
+      if (sbAuthData.user) {
+        const { error: profileErr } = await supabase.from('profiles').upsert({
+          id: userId,
+          full_name: formData.name.trim(),
+          email: normalizedEmail,
+          university_name: formData.institution.trim(),
+          class_year: formData.academicLevel.trim(),
+          student_id_number: formData.studentId?.trim() || '',
+          avatar_url: null,
+          role: 'student',
+        });
 
-      if (profileErr) {
-        console.warn('[Supabase Profiles Upsert Notice]:', profileErr.message);
+        if (profileErr) {
+          console.error('Profile creation error:', profileErr);
+        }
       }
 
       // 3. Clean fresh session state for the new student
