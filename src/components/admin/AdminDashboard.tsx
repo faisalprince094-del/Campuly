@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 import { apiRequest } from '../../utils/api';
 import { StudentAdminRecord, AdminDashboardStats } from '../../types';
 import { CampuslyLogo } from '../ui/CampuslyLogo';
@@ -56,7 +57,20 @@ export const AdminDashboard: React.FC = () => {
       else setIsRefreshing(true);
 
       try {
-        // Read local students from localStorage 'campusly_users'
+        // Fetch all global profiles directly from Supabase Cloud Database
+        let cloudProfiles: any[] = [];
+        let isSupabaseLoaded = false;
+        try {
+          const { data, error } = await supabase.from('profiles').select('*');
+          if (!error && Array.isArray(data)) {
+            cloudProfiles = data;
+            isSupabaseLoaded = true;
+          }
+        } catch (supaErr) {
+          console.warn('Supabase fetch notice in Admin Console:', supaErr);
+        }
+
+        // Also check local cache for seamless merge if needed
         let localUsers: any[] = [];
         try {
           const raw = localStorage.getItem('campusly_users');
@@ -67,22 +81,58 @@ export const AdminDashboard: React.FC = () => {
           localUsers = [];
         }
 
+        // Combine cloud profiles and local cache (prioritizing Supabase cloud records)
+        const combinedMap = new Map<string, any>();
+
+        // 1. Add local users first
+        (localUsers || []).forEach((u) => {
+          const key = (u.email || u.id || '').toLowerCase().trim();
+          if (key) combinedMap.set(key, u);
+        });
+
+        // 2. Overlay / add cloud profiles from Supabase
+        (cloudProfiles || []).forEach((p) => {
+          const key = (p.email || p.id || '').toLowerCase().trim();
+          if (key) {
+            combinedMap.set(key, {
+              ...combinedMap.get(key),
+              ...p,
+              id: p.id || combinedMap.get(key)?.id || key,
+              name: p.full_name || p.name || combinedMap.get(key)?.name || 'Student',
+              email: p.email || combinedMap.get(key)?.email || '',
+              studentId: p.student_id || p.studentId || combinedMap.get(key)?.studentId || 'N/A',
+              institution: p.university_name || p.institution || p.university || combinedMap.get(key)?.institution || 'General University',
+              academicLevel: p.academic_level || p.academicLevel || combinedMap.get(key)?.academicLevel || '1st Year',
+              department: p.department || combinedMap.get(key)?.department || 'General Studies',
+              semester: p.semester || p.academic_level || p.academicLevel || combinedMap.get(key)?.semester || '1st Year',
+              role: p.role || combinedMap.get(key)?.role || 'student',
+              status: p.status || combinedMap.get(key)?.status || 'active',
+              profilePhoto: p.profile_photo || p.profilePhoto || combinedMap.get(key)?.profilePhoto || '',
+              createdAt: p.created_at || p.createdAt || combinedMap.get(key)?.createdAt || new Date().toISOString(),
+              lastLoginAt: p.last_login_at || p.lastLoginAt || p.created_at || combinedMap.get(key)?.lastLoginAt || new Date().toISOString(),
+              loginCount: p.login_count || p.loginCount || combinedMap.get(key)?.loginCount || 1,
+            });
+          }
+        });
+
+        const mergedList = Array.from(combinedMap.values());
+
         // Map to StudentAdminRecord structure
-        let studentRecords: StudentAdminRecord[] = (localUsers || []).map((u) => ({
+        let studentRecords: StudentAdminRecord[] = mergedList.map((u) => ({
           id: u.id,
-          name: u.name || 'Student',
+          name: u.full_name || u.name || 'Student',
           email: u.email || '',
-          studentId: u.studentId || u.student_id || 'N/A',
-          institution: u.institution || u.university || 'General University',
-          academicLevel: u.academicLevel || u.semester || '1st Year',
+          studentId: u.student_id || u.studentId || 'N/A',
+          institution: u.university_name || u.institution || u.university || 'General University',
+          academicLevel: u.academic_level || u.academicLevel || u.semester || '1st Year',
           department: u.department || 'General Studies',
-          semester: u.semester || u.academicLevel || '1st Year',
+          semester: u.semester || u.academic_level || u.academicLevel || '1st Year',
           role: (u.role as any) || 'student',
           status: (u.status as any) || 'active',
-          profilePhoto: u.profilePhoto || '',
-          createdAt: u.createdAt || new Date().toISOString(),
-          lastLoginAt: u.lastLoginAt || u.createdAt || new Date().toISOString(),
-          loginCount: u.loginCount || 1,
+          profilePhoto: u.profile_photo || u.profilePhoto || '',
+          createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+          lastLoginAt: u.last_login_at || u.lastLoginAt || u.created_at || new Date().toISOString(),
+          loginCount: u.login_count || u.loginCount || 1,
           stats: {
             tasksCount: u.stats?.tasksCount || 0,
             completedTasksCount: u.stats?.completedTasksCount || 0,
@@ -172,13 +222,30 @@ export const AdminDashboard: React.FC = () => {
     setUpdatingStudentId(student.id);
 
     try {
+      // Update in Supabase
+      try {
+        if (student.email) {
+          await supabase
+            .from('profiles')
+            .update({ status: newStatus })
+            .ilike('email', student.email.trim());
+        } else if (student.id) {
+          await supabase
+            .from('profiles')
+            .update({ status: newStatus })
+            .eq('id', student.id);
+        }
+      } catch (supaErr) {
+        console.warn('Supabase profile status update:', supaErr);
+      }
+
       // Update in LocalStorage
       try {
         const raw = localStorage.getItem('campusly_users');
         if (raw) {
           const list = JSON.parse(raw);
           const updated = list.map((u: any) =>
-            u.id === student.id ? { ...u, status: newStatus } : u
+            (u.id === student.id || (u.email && u.email.toLowerCase() === student.email?.toLowerCase())) ? { ...u, status: newStatus } : u
           );
           localStorage.setItem('campusly_users', JSON.stringify(updated));
         }
@@ -220,12 +287,29 @@ export const AdminDashboard: React.FC = () => {
     setIsDeleting(true);
 
     try {
+      // Delete from Supabase
+      try {
+        if (studentToDelete.email) {
+          await supabase
+            .from('profiles')
+            .delete()
+            .ilike('email', studentToDelete.email.trim());
+        } else if (studentToDelete.id) {
+          await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', studentToDelete.id);
+        }
+      } catch (supaErr) {
+        console.warn('Supabase profile delete error:', supaErr);
+      }
+
       // Delete from LocalStorage
       try {
         const raw = localStorage.getItem('campusly_users');
         if (raw) {
           const list = JSON.parse(raw);
-          const filtered = list.filter((u: any) => u.id !== studentToDelete.id);
+          const filtered = list.filter((u: any) => u.id !== studentToDelete.id && (!studentToDelete.email || u.email?.toLowerCase() !== studentToDelete.email.toLowerCase()));
           localStorage.setItem('campusly_users', JSON.stringify(filtered));
         }
       } catch (e) {

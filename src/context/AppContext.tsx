@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { supabase } from '../lib/supabase';
 import { User, Subject, Task, Expense, Budget, StudySession, ActiveTimerState, UniversityEvent, Presentation, AppNotification, Note } from '../types';
 import { apiRequest } from '../utils/api';
 import { sounds } from '../utils/audio';
@@ -891,6 +892,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normalizedEmail = email.trim().toLowerCase();
       if (!normalizedEmail) throw new Error('Please enter your email address.');
 
+      // 1. Query Supabase Central Cloud Database profiles table
+      let cloudProfile: any = null;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .ilike('email', normalizedEmail)
+          .maybeSingle();
+
+        if (data && !error) {
+          cloudProfile = data;
+        }
+      } catch (supaErr) {
+        console.warn('Supabase profile query note:', supaErr);
+      }
+
+      if (cloudProfile) {
+        if (cloudProfile.status === 'inactive') {
+          throw new Error('This account has been deactivated by administrator.');
+        }
+
+        if (password && cloudProfile.password && cloudProfile.password !== password) {
+          throw new Error('Incorrect password. Please verify your credentials.');
+        }
+
+        const cloudUser: User = {
+          id: cloudProfile.id || `stu_${Date.now()}`,
+          name: cloudProfile.full_name || cloudProfile.name || normalizedEmail.split('@')[0],
+          email: cloudProfile.email,
+          university: cloudProfile.university_name || cloudProfile.institution || cloudProfile.university || 'Campus University',
+          institution: cloudProfile.university_name || cloudProfile.institution || cloudProfile.university || 'Campus University',
+          academicLevel: cloudProfile.academic_level || cloudProfile.academicLevel || cloudProfile.semester || '1st Year',
+          semester: cloudProfile.semester || cloudProfile.academic_level || cloudProfile.academicLevel || '1st Year',
+          studentId: cloudProfile.student_id || cloudProfile.studentId || undefined,
+          department: cloudProfile.department || 'General Studies',
+          role: cloudProfile.role || 'student',
+          status: cloudProfile.status || 'active',
+          profilePhoto: cloudProfile.profile_photo || cloudProfile.profilePhoto || '',
+          preferences: {
+            theme: 'dark',
+            currency: 'BDT',
+            currencySymbol: '৳',
+            dailyStudyGoalMinutes: 120,
+            notifications: true,
+            onboardingCompleted: true,
+            weekStartsOn: 1,
+          },
+          createdAt: cloudProfile.created_at || cloudProfile.createdAt || new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: (cloudProfile.login_count || cloudProfile.loginCount || 1) + 1,
+        };
+
+        const userToken = `tok_${cloudUser.id}_${Date.now()}`;
+        setUser(cloudUser);
+        setToken(userToken);
+        setLocalItem('campusly_current_user', cloudUser);
+        setLocalItem('campusly_user', cloudUser);
+        setLocalItem('campusly_token', userToken);
+
+        // Cache in local array
+        const existingUsers = getLocalItem<any[]>('campusly_users', []);
+        const idx = existingUsers.findIndex(
+          (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
+        );
+        if (idx >= 0) {
+          existingUsers[idx] = { ...existingUsers[idx], ...cloudUser, password: password || cloudProfile.password };
+        } else {
+          existingUsers.push({ ...cloudUser, password: password || cloudProfile.password });
+        }
+        setLocalItem('campusly_users', existingUsers);
+
+        showToast(`Welcome back, ${cloudUser.name}!`, 'success');
+        return;
+      }
+
+      // 2. Fallback to LocalStorage registered accounts
       const existingUsers = getLocalItem<any[]>('campusly_users', []);
       const matchedUser = existingUsers.find(
         (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
@@ -1114,6 +1191,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const userId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+      // 1. Central Supabase Cloud Sync
+      try {
+        await supabase.from('profiles').insert([
+          {
+            full_name: normalizedName,
+            email: normalizedEmail,
+            university_name: normalizedInst,
+            student_id: formData.studentId?.trim() || null,
+            password: formData.password,
+          },
+        ]);
+      } catch (supaErr) {
+        console.warn('Supabase cloud profile insert notice:', supaErr);
+      }
+
       const newUser: User = {
         id: userId,
         name: normalizedName,
@@ -1141,7 +1233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginCount: 1,
       };
 
-      // 1. Direct LocalStorage Persistence into 'campusly_users'
+      // 2. Direct LocalStorage Persistence into 'campusly_users'
       const storedUserRecord = {
         ...newUser,
         password: formData.password,
