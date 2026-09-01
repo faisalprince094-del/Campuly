@@ -26,6 +26,12 @@ export const AuthView: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('signin');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleModeChange = (newMode: AuthMode) => {
+    setMode(newMode);
+    setErrorMessage(null);
+  };
 
   // Student Sign In fields (clean initial state, no prefilled values)
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -47,16 +53,14 @@ export const AuthView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage(null);
 
     try {
       if (mode === 'signup') {
         if (!signUpName.trim()) throw new Error('Please enter your full name.');
         if (!signUpEmail.trim()) throw new Error('Please enter your email address.');
-        if (!signUpPassword || signUpPassword.length < 1 || signUpPassword.length > 6) {
-          throw new Error('Password must be between 1 and 6 characters.');
-        }
-        if (!/^[A-Za-z0-9]+$/.test(signUpPassword)) {
-          throw new Error('Password must only contain English letters (A-Z, a-z) and numbers (0-9).');
+        if (!signUpPassword || signUpPassword.length < 6) {
+          throw new Error('Password must be at least 6 characters.');
         }
         if (!signUpInstitution.trim()) throw new Error('Please enter your institution/university name.');
         if (!signUpAcademicLevel.trim()) {
@@ -83,7 +87,9 @@ export const AuthView: React.FC = () => {
         await login(loginEmail.trim(), loginPassword);
       }
     } catch (err: any) {
-      showToast(err.message || 'Authentication failed. Please check your credentials.', 'error');
+      const msg = err?.message || 'Authentication failed. Please check your credentials.';
+      setErrorMessage(msg);
+      showToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +118,7 @@ export const AuthView: React.FC = () => {
             <button
               id="tab-signin"
               type="button"
-              onClick={() => setMode('signin')}
+              onClick={() => handleModeChange('signin')}
               className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 mode === 'signin'
                   ? 'bg-white dark:bg-[#1C2636] text-blue-600 dark:text-blue-400 shadow-xs'
@@ -126,7 +132,7 @@ export const AuthView: React.FC = () => {
             <button
               id="tab-signup"
               type="button"
-              onClick={() => setMode('signup')}
+              onClick={() => handleModeChange('signup')}
               className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 mode === 'signup'
                   ? 'bg-white dark:bg-[#1C2636] text-blue-600 dark:text-blue-400 shadow-xs'
@@ -140,7 +146,7 @@ export const AuthView: React.FC = () => {
             <button
               id="tab-admin"
               type="button"
-              onClick={() => setMode('admin')}
+              onClick={() => handleModeChange('admin')}
               className={`py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 mode === 'admin'
                   ? 'bg-purple-600 text-white shadow-xs'
@@ -151,6 +157,18 @@ export const AuthView: React.FC = () => {
               <span>Admin</span>
             </button>
           </div>
+
+          {/* Prominent On-Screen Error Diagnostics Banner */}
+          {errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl flex items-start gap-2.5 text-rose-700 dark:text-rose-300 text-xs"
+            >
+              <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
+              <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
+            </motion.div>
+          )}
 
           <div className="relative flex items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-[#1E293B]"></div>
@@ -207,7 +225,7 @@ export const AuthView: React.FC = () => {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    Password <span className="text-rose-500">* (1-6 letters or numbers)</span>
+                    Password <span className="text-rose-500">* (at least 6 characters)</span>
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -215,8 +233,7 @@ export const AuthView: React.FC = () => {
                       id="signup-password-input"
                       type={showPassword ? 'text' : 'password'}
                       required
-                      maxLength={6}
-                      placeholder="1-6 characters (A-Z, a-z, 0-9)"
+                      placeholder="Enter a secure password (min 6 chars)"
                       value={signUpPassword}
                       onChange={(e) => setSignUpPassword(e.target.value)}
                       className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-slate-200 dark:border-[#1E293B] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"

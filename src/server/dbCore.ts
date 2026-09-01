@@ -199,12 +199,8 @@ export function validatePassword(password: string): { valid: boolean; error?: st
   if (typeof password !== 'string' || password.length === 0) {
     return { valid: false, error: 'Password is required.' };
   }
-  if (password.length > 6) {
-    return { valid: false, error: 'Password must be between 1 and 6 characters.' };
-  }
-  const alphanumericRegex = /^[A-Za-z0-9]+$/;
-  if (!alphanumericRegex.test(password)) {
-    return { valid: false, error: 'Password must contain only English letters (A-Z, a-z) and numbers (0-9).' };
+  if (password.length > 64) {
+    return { valid: false, error: 'Password must not exceed 64 characters.' };
   }
   return { valid: true };
 }
@@ -226,9 +222,10 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
       semester,
       department,
       studentId,
+      supabaseUserId,
     } = body || {};
 
-    console.log('[Auth API] registerStudent called for email:', email ? String(email).trim() : 'missing');
+    console.log('[Auth API] registerStudent called for email:', email ? String(email).trim().toLowerCase() : 'missing');
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return { status: 400, data: { success: false, error: 'Full Name is required.', message: 'Full Name is required.' } };
@@ -244,7 +241,7 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
       return { status: 400, data: { success: false, error: 'Please provide a valid email address.', message: 'Please provide a valid email address.' } };
     }
 
-    // Validate Password (1-6 alphanumeric characters)
+    // Validate Password
     const pwValidation = validatePassword(password);
     if (!pwValidation.valid) {
       return { status: 400, data: { success: false, error: pwValidation.error, message: pwValidation.error } };
@@ -277,7 +274,9 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
 
     // Securely hash password with random salt using PBKDF2 (SHA-512)
     const { hash, salt } = hashPassword(password);
-    const newUserId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newUserId = (supabaseUserId && typeof supabaseUserId === 'string' && supabaseUserId.trim())
+      ? supabaseUserId.trim()
+      : `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const newUser = {
       id: newUserId,
@@ -330,22 +329,29 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
     try {
       const supabase = getSupabaseClient();
       if (supabase) {
-        Promise.resolve(
-          supabase.from('profiles').upsert({
-            id: newUserId,
-            name: name.trim(),
-            email: normalizedEmail,
-            student_id: (studentId || '').trim(),
-            institution: instName,
-            academic_level: levelName,
-            department: (department || 'General Studies').trim(),
-            role: 'student',
-            status: 'active',
-            profile_photo: '',
-            created_at: new Date().toISOString(),
-            last_login_at: new Date().toISOString(),
-          })
-        )
+        const profilePayload: Record<string, any> = {
+          full_name: name.trim(),
+          name: name.trim(),
+          email: normalizedEmail,
+          university_name: instName,
+          institution: instName,
+          class_year: levelName,
+          academic_level: levelName,
+          student_id_number: (studentId || '').trim(),
+          student_id: (studentId || '').trim(),
+          department: (department || 'General Studies').trim(),
+          avatar_url: null,
+          profile_photo: '',
+          role: 'student',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          last_login_at: new Date().toISOString(),
+        };
+        if (supabaseUserId) {
+          profilePayload.id = supabaseUserId;
+        }
+
+        Promise.resolve(supabase.from('profiles').upsert(profilePayload))
           .then((res: any) => {
             if (res && res.error) {
               console.warn('[Supabase Sync Notice] Profiles table upsert:', res.error.message);

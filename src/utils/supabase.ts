@@ -1,17 +1,17 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Supabase URL & Public Anon Key configuration
+// Supabase URL & Public Anon Key configuration with resilient hardcoded fallbacks
 const SUPABASE_URL =
   (typeof process !== 'undefined' && process.env?.SUPABASE_URL) ||
   (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) ||
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) ||
-  'https://pixypjmyouyxauzczyaq.supabase.co';
+  'https://gehsrgxcymletikxarga.supabase.co';
 
 const SUPABASE_ANON_KEY =
   (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) ||
   (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) ||
-  'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI';
+  'sb_publishable_caDAhzna2PLD4b5IWkctXg_RBjKqXIn';
 
 let cachedSupabase: SupabaseClient | null = null;
 

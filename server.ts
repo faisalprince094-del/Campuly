@@ -40,11 +40,9 @@ const _dirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 const PORT = 3000;
 const app = express();
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Enable CORS for cross-origin preview / deployment environments
-app.use((req, res, next) => {
+app.use((req: any, res: any, next: any) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -53,6 +51,17 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Guard against stream re-read hang when body is already parsed by Vercel Serverless runtime
+app.use((req: any, res: any, next: any) => {
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+    req._body = true;
+  }
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Normalize /api prefix for serverless environments (e.g., Vercel rewrites)
 app.use((req, res, next) => {
