@@ -11,7 +11,7 @@ const SUPABASE_ANON_KEY =
   (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) ||
   (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
   (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) ||
-  'sb_publishable_caDAhzna2PLD4b5IWkctXg_RBjKqXIn';
+  'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI';
 
 let cachedSupabase: SupabaseClient | null = null;
 
