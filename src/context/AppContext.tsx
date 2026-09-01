@@ -989,10 +989,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isPrimaryAdmin) {
         const adminUser: User = {
           id: 'admin_master_001',
-          name: 'Admin',
+          name: 'Foyshal Mahmud Prince',
           email: 'faisalprince094@gmail.com',
-          university: 'Campusly System HQ',
-          institution: 'Campusly HQ',
+          university: 'Jashore University of Science and Technology (JUST)',
+          institution: 'JUST',
           academicLevel: 'System Administration',
           semester: 'Admin',
           role: 'admin',
@@ -1018,7 +1018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLocalItem('campusly_current_user', {
           email: 'faisalprince094@gmail.com',
           role: 'admin',
-          full_name: 'Admin',
+          full_name: 'Foyshal Mahmud Prince',
           ...adminUser,
         });
         setLocalItem('campusly_user', adminUser);
@@ -1043,6 +1043,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const adminUser: User = {
           ...matchedAdmin,
+          name: matchedAdmin.name || 'Foyshal Mahmud Prince',
           role: 'admin',
           lastLoginAt: new Date().toISOString(),
         };
@@ -1053,7 +1054,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setLocalItem('campusly_current_user', {
           email: adminUser.email,
           role: 'admin',
-          full_name: adminUser.name || 'Admin',
+          full_name: adminUser.name || 'Foyshal Mahmud Prince',
           ...adminUser,
         });
         setLocalItem('campusly_user', adminUser);

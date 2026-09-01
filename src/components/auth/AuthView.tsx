@@ -76,10 +76,12 @@ export const AuthView: React.FC = () => {
           studentId: signUpStudentId.trim() || undefined,
         });
       } else if (mode === 'admin') {
-        if (!adminEmail.trim()) throw new Error('Please enter your admin email address.');
-        if (!adminPassword) throw new Error('Please enter your admin password.');
+        const trimmedAdminEmail = adminEmail.trim();
+        const trimmedAdminPassword = adminPassword.trim();
+        if (!trimmedAdminEmail) throw new Error('Please enter your admin email address.');
+        if (!trimmedAdminPassword) throw new Error('Please enter your admin password.');
 
-        await adminLogin(adminEmail.trim(), adminPassword);
+        await adminLogin(trimmedAdminEmail, trimmedAdminPassword);
       } else {
         if (!loginEmail.trim()) throw new Error('Please enter your email address.');
         if (!loginPassword) throw new Error('Please enter your password.');
