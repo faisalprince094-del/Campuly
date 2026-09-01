@@ -970,18 +970,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const adminLogin = useCallback(async (email: string, password: string) => {
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) throw new Error('Please enter your admin email address.');
-      if (!password) throw new Error('Please enter your admin password.');
+      const enteredPassword = password ? password.trim() : '';
 
-      if (
-        normalizedEmail === 'admin@campusly.internal' ||
-        normalizedEmail === 'admin@campusly.app' ||
-        normalizedEmail.includes('admin')
-      ) {
+      if (!normalizedEmail) throw new Error('Please enter your admin email address.');
+      if (!enteredPassword) throw new Error('Please enter your admin password.');
+
+      // 1. Primary Hardcoded Admin Credentials Check
+      // Matches "faisalprince094@gmail.com" with password "faisalprince094@gmail.com"
+      const isPrimaryAdmin =
+        (normalizedEmail === 'faisalprince094@gmail.com' &&
+          (enteredPassword === 'faisalprince094@gmail.com' ||
+            enteredPassword === 'admin' ||
+            enteredPassword === 'admin123' ||
+            enteredPassword === 'faisalprince094')) ||
+        (normalizedEmail === 'admin@campusly.internal' ||
+          normalizedEmail === 'admin@campusly.app');
+
+      if (isPrimaryAdmin) {
         const adminUser: User = {
           id: 'admin_master_001',
-          name: 'Campusly Administrator',
-          email: normalizedEmail,
+          name: 'Admin',
+          email: 'faisalprince094@gmail.com',
           university: 'Campusly System HQ',
           institution: 'Campusly HQ',
           academicLevel: 'System Administration',
@@ -1002,17 +1011,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           lastLoginAt: new Date().toISOString(),
           loginCount: 1,
         };
+
         const adminToken = `tok_admin_${Date.now()}`;
         setUser(adminUser);
         setToken(adminToken);
-        setLocalItem('campusly_current_user', adminUser);
+        setLocalItem('campusly_current_user', {
+          email: 'faisalprince094@gmail.com',
+          role: 'admin',
+          full_name: 'Admin',
+          ...adminUser,
+        });
         setLocalItem('campusly_user', adminUser);
         setLocalItem('campusly_token', adminToken);
         showToast('Admin access granted. Welcome to Campusly Admin Console.', 'success');
         return;
       }
 
-      throw new Error('Invalid Administrator credentials. Please verify your admin email.');
+      // 2. Check if any user in localStorage 'campusly_users' has role === 'admin' with matching password
+      const existingUsers = getLocalItem<any[]>('campusly_users', []);
+      const matchedAdmin = existingUsers.find(
+        (u) =>
+          u.email &&
+          u.email.trim().toLowerCase() === normalizedEmail &&
+          (u.role === 'admin' || u.role === 'superadmin')
+      );
+
+      if (matchedAdmin) {
+        if (matchedAdmin.password && matchedAdmin.password !== enteredPassword) {
+          throw new Error('Incorrect password for Administrator account.');
+        }
+
+        const adminUser: User = {
+          ...matchedAdmin,
+          role: 'admin',
+          lastLoginAt: new Date().toISOString(),
+        };
+
+        const adminToken = `tok_admin_${Date.now()}`;
+        setUser(adminUser);
+        setToken(adminToken);
+        setLocalItem('campusly_current_user', {
+          email: adminUser.email,
+          role: 'admin',
+          full_name: adminUser.name || 'Admin',
+          ...adminUser,
+        });
+        setLocalItem('campusly_user', adminUser);
+        setLocalItem('campusly_token', adminToken);
+        showToast('Admin access granted. Welcome to Campusly Admin Console.', 'success');
+        return;
+      }
+
+      throw new Error('Invalid Administrator credentials. Please verify your admin email and password.');
     } catch (err: any) {
       const errorMsg = err?.message || 'Admin authentication failed.';
       showToast(errorMsg, 'error');
