@@ -90,6 +90,9 @@ export const AuthView: React.FC = () => {
       const msg = err?.message || 'Authentication failed. Please check your credentials.';
       setErrorMessage(msg);
       showToast(msg, 'error');
+      if (typeof window !== 'undefined') {
+        alert(msg);
+      }
     } finally {
       setIsLoading(false);
     }
