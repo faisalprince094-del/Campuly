@@ -381,13 +381,13 @@ export const AuthView: React.FC = () => {
                       id="admin-email-input"
                       type="email"
                       required
-                      placeholder="faisalprince094@gmail.com"
+                      placeholder="Enter admin email"
                       value={adminEmail}
                       onChange={(e) => {
                         setAdminEmail(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 opacity-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
                 </div>
@@ -408,7 +408,7 @@ export const AuthView: React.FC = () => {
                         setAdminPassword(e.target.value);
                         if (errorMessage) setErrorMessage(null);
                       }}
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-[#101823] border border-purple-200 dark:border-purple-900/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 opacity-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
                     <button
                       type="button"
