@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="campGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="100%" stop-color="#EAB308" />
+    </linearGradient>
+  </defs>
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="128" fill="url(#campGrad)" />
+  <!-- Graduation Cap / Campus Symbol -->
+  <g transform="translate(256, 256)">
+    <!-- Cap Top -->
+    <path d="M 0 -100 L 160 -20 L 0 60 L -160 -20 Z" fill="#FFFFFF" opacity="0.95" />
+    <!-- Cap Under Base -->
+    <path d="M -90 10 L 0 65 L 90 10 L 90 70 C 90 115 0 145 0 145 C 0 145 -90 115 -90 70 Z" fill="#FFFFFF" opacity="0.8" />
+    <!-- Tassel -->
+    <path d="M 120 0 L 140 75 L 130 80 L 110 5 Z" fill="url(#goldGrad)" />
+    <circle cx="140" cy="85" r="12" fill="url(#goldGrad)" />
+    <!-- Center Emblem -->
+    <circle cx="0" cy="-20" r="14" fill="url(#goldGrad)" />
+  </g>
+</svg>
