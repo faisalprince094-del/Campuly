@@ -61,7 +61,10 @@ export const AdminDashboard: React.FC = () => {
         let cloudProfiles: any[] = [];
         let isSupabaseLoaded = false;
         try {
-          const { data, error } = await supabase.from('profiles').select('*');
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
           if (!error && Array.isArray(data)) {
             cloudProfiles = data;
             isSupabaseLoaded = true;
