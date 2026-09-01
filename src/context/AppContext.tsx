@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabase';
 import { User, Subject, Task, Expense, Budget, StudySession, ActiveTimerState, UniversityEvent, Presentation, AppNotification, Note } from '../types';
 import { apiRequest } from '../utils/api';
 import { sounds } from '../utils/audio';

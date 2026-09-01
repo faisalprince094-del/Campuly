@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../../supabase';
 import { apiRequest } from '../../utils/api';
 import { StudentAdminRecord, AdminDashboardStats } from '../../types';
 import { CampuslyLogo } from '../ui/CampuslyLogo';
