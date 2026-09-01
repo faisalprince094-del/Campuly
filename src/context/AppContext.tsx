@@ -382,6 +382,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Background Migration: Auto-migrate any un-synced LocalStorage student records to Supabase on app startup
+  useEffect(() => {
+    const migrateLocalUsersToSupabase = async () => {
+      try {
+        const localUsers = getLocalItem<any[]>('campusly_users', []);
+        if (!Array.isArray(localUsers) || localUsers.length === 0) return;
+
+        // Fetch existing emails in Supabase to avoid duplicates
+        const { data: existingProfiles } = await supabase.from('profiles').select('email');
+        const existingEmailSet = new Set(
+          (existingProfiles || []).map((p: any) => (p.email || '').toLowerCase().trim())
+        );
+
+        // Find users present in local storage but missing in Supabase
+        const usersToSync = localUsers.filter((u: any) => {
+          const email = (u.email || '').toLowerCase().trim();
+          return email && !existingEmailSet.has(email) && !email.includes('admin');
+        });
+
+        if (usersToSync.length > 0) {
+          const insertPayload = usersToSync.map((u: any) => ({
+            full_name: u.name || u.full_name || 'Student',
+            email: (u.email || '').toLowerCase().trim(),
+            university_name: u.university_name || u.institution || u.university || 'Campus University',
+            student_id: u.student_id || u.studentId || null,
+            password: u.password || 'password123',
+            academic_level: u.academic_level || u.academicLevel || u.semester || '1st Year',
+            department: u.department || 'General Studies',
+            role: u.role || 'student',
+            status: u.status || 'active',
+          }));
+
+          await supabase.from('profiles').insert(insertPayload);
+        }
+      } catch (migrationErr) {
+        console.warn('Background Supabase migration note:', migrationErr);
+      }
+    };
+
+    migrateLocalUsersToSupabase();
+  }, []);
+
   // Verify session on initial app load using 100% LocalStorage
   useEffect(() => {
     let isMounted = true;
@@ -967,7 +1009,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // 2. Fallback to LocalStorage registered accounts
+      // 2. Fallback to LocalStorage registered accounts (with on-the-fly Supabase migration)
       const existingUsers = getLocalItem<any[]>('campusly_users', []);
       const matchedUser = existingUsers.find(
         (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
@@ -980,6 +1022,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (password && matchedUser.password && matchedUser.password !== password) {
           throw new Error('Incorrect password. Please verify your credentials.');
+        }
+
+        // On-the-fly migrate this local user into Supabase profiles table
+        try {
+          await supabase.from('profiles').insert([
+            {
+              full_name: matchedUser.name || matchedUser.full_name || 'Student',
+              email: normalizedEmail,
+              university_name: matchedUser.university_name || matchedUser.institution || matchedUser.university || 'Campus University',
+              student_id: matchedUser.student_id || matchedUser.studentId || null,
+              password: password || matchedUser.password || 'password123',
+              academic_level: matchedUser.academic_level || matchedUser.academicLevel || matchedUser.semester || '1st Year',
+              department: matchedUser.department || 'General Studies',
+              role: matchedUser.role || 'student',
+              status: matchedUser.status || 'active',
+            },
+          ]);
+        } catch (syncErr) {
+          console.warn('On-the-fly Supabase migration notice during login:', syncErr);
         }
 
         // Update login stats
