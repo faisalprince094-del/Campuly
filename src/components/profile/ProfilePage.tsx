@@ -161,7 +161,7 @@ export const ProfilePage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn">
+    <div className="max-w-4xl mx-auto space-y-8 animate-fadeIn pb-28 overflow-y-auto">
       {/* Hidden native file input for profile photo */}
       <input
         type="file"
@@ -227,14 +227,32 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            id="edit-profile-toggle-btn"
-            onClick={isEditing ? handleCancelEditing : handleStartEditing}
-            className="px-4 py-2 rounded-2xl bg-slate-100 dark:bg-[#101823] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>{isEditing ? 'Cancel Edit' : 'Edit Profile'}</span>
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            <button
+              id="edit-profile-toggle-btn"
+              onClick={isEditing ? handleCancelEditing : handleStartEditing}
+              className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-[#101823] hover:bg-blue-50 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>{isEditing ? 'Cancel' : 'Edit Profile'}</span>
+            </button>
+
+            {/* Top-Right Header Sign-Out Button */}
+            <button
+              id="header-profile-logout-btn"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('campusly_current_user');
+                } catch {}
+                logout();
+              }}
+              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="Sign out of your account"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
 
         {/* Edit Form Drawer */}
@@ -480,13 +498,16 @@ export const ProfilePage: React.FC = () => {
       </div>
 
       {/* Prominent Profile Sign-Out Button (Mobile-Friendly & High Contrast) */}
-      <div className="pt-2 pb-6">
+      <div className="pt-4 pb-8">
         <button
           id="profile-logout-btn"
           onClick={() => {
+            try {
+              localStorage.removeItem('campusly_current_user');
+            } catch {}
             logout();
           }}
-          className="w-full py-4 px-6 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/25 border border-rose-500/30 dark:border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-xs cursor-pointer active:scale-[0.99]"
+          className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           <span>Sign Out from Campusly</span>
