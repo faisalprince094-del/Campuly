@@ -4,7 +4,6 @@ import { apiRequest } from '../utils/api';
 import { sounds } from '../utils/audio';
 import { getAvatarFromDB, saveAvatarToDB, removeAvatarFromDB } from '../utils/imageStorage';
 import { getTodayStudySeconds, formatStudyDuration, getWeeklyStudyStats, getSubjectStudyMap } from '../utils/studyTracker';
-import { getSupabaseClient } from '../utils/supabase';
 
 export type MainTab = 'dashboard' | 'study' | 'create' | 'ai-assistant' | 'finance' | 'planner' | 'notifications' | 'profile' | 'settings' | 'onboarding' | 'home';
 
@@ -155,12 +154,14 @@ function setLocalItem<T>(key: string, value: T): void {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Authentication State
+  // Authentication State with 100% LocalStorage support
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('campusly_token') || null;
   });
-  const [user, setUser] = useState<User | null>(() => getLocalItem<User | null>('campusly_user', null));
+  const [user, setUser] = useState<User | null>(() => {
+    return getLocalItem<User | null>('campusly_current_user', null) || getLocalItem<User | null>('campusly_user', null);
+  });
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
@@ -366,97 +367,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Verify session on initial app load with safety timeout
+  // Verify session on initial app load using 100% LocalStorage
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: any = null;
 
-    // Guaranteed fallback: unblock UI after max 1.5s
-    timeoutId = setTimeout(() => {
+    try {
+      const activeUser =
+        getLocalItem<User | null>('campusly_current_user', null) ||
+        getLocalItem<User | null>('campusly_user', null);
+      const savedToken =
+        localStorage.getItem('campusly_token') ||
+        (activeUser ? `tok_${activeUser.id}` : null);
+
+      if (activeUser && isMounted) {
+        setUser(activeUser);
+        setToken(savedToken);
+      }
+    } catch (err: any) {
+      console.warn('LocalStorage session verification notice:', err);
+    } finally {
       if (isMounted) {
         setIsAuthLoading(false);
       }
-    }, 1500);
+    }
 
-    const verifyAuth = async () => {
-      try {
-        const supabase = getSupabaseClient();
-        if (supabase) {
-          const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData?.session?.user && isMounted) {
-            const sbUser = sessionData.session.user;
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', sbUser.id)
-              .maybeSingle();
-
-            const studentName =
-              profile?.full_name ||
-              profile?.name ||
-              sbUser.user_metadata?.full_name ||
-              sbUser.user_metadata?.name ||
-              sbUser.email?.split('@')[0] ||
-              'Student';
-
-            const activeUser: User = {
-              id: sbUser.id,
-              name: studentName,
-              email: sbUser.email || '',
-              university: profile?.university_name || profile?.institution || 'Campus University',
-              institution: profile?.university_name || profile?.institution || 'Campus University',
-              academicLevel: profile?.class_year || profile?.academic_level || '1st Year',
-              semester: profile?.class_year || profile?.academic_level || '1st Year',
-              studentId: profile?.student_id_number || profile?.student_id || undefined,
-              department: profile?.department || 'General Studies',
-              role: (profile?.role as any) || 'student',
-              status: (profile?.status as any) || 'active',
-              profilePhoto: profile?.avatar_url || profile?.profile_photo || '',
-              preferences: {
-                theme: 'dark',
-                currency: 'BDT',
-                currencySymbol: '৳',
-                dailyStudyGoalMinutes: 120,
-                notifications: true,
-                onboardingCompleted: true,
-                weekStartsOn: 1,
-              },
-              createdAt: profile?.created_at || new Date().toISOString(),
-              lastLoginAt: new Date().toISOString(),
-              loginCount: 1,
-            };
-
-            setUser(activeUser);
-            setToken(sessionData.session.access_token);
-            setLocalItem('campusly_user', activeUser);
-            setLocalItem('campusly_token', sessionData.session.access_token);
-            if (isMounted) setIsAuthLoading(false);
-            return;
-          }
-        }
-
-        // Fallback to local stored session if exists
-        const savedUser = getLocalItem<User | null>('campusly_user', null);
-        const savedToken = localStorage.getItem('campusly_token');
-        if (savedUser && savedToken && isMounted) {
-          setUser(savedUser);
-          setToken(savedToken);
-        }
-      } catch (err: any) {
-        console.warn('Session verification notice:', err);
-      } finally {
-        if (isMounted) {
-          setIsAuthLoading(false);
-        }
-      }
-    };
-
-    verifyAuth();
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [refreshAllData]);
+  }, []);
 
   // Global Timer Interval (calculates exact elapsed seconds using timestamps)
   useEffect(() => {
@@ -651,6 +589,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setUser((prev) => {
+      if (!prev) return null;
       const updated = {
         ...prev,
         ...data,
@@ -659,31 +598,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...(data.preferences || {}),
         },
       };
+      setLocalItem('campusly_current_user', updated);
       setLocalItem('campusly_user', updated);
+
+      // Sync user profile update in campusly_users array
+      try {
+        const storedUsers = getLocalItem<any[]>('campusly_users', []);
+        const updatedUsers = storedUsers.map((u) => (u.id === prev.id ? { ...u, ...updated } : u));
+        setLocalItem('campusly_users', updatedUsers);
+      } catch (e) {
+        console.warn('LocalStorage user update notice:', e);
+      }
+
       return updated;
     });
 
-    // Direct Supabase profile sync
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase && user?.id) {
-        supabase.from('profiles').upsert({
-          id: user.id,
-          ...(data.name ? { full_name: data.name } : {}),
-          ...(data.institution ? { university_name: data.institution } : {}),
-          ...(data.academicLevel ? { class_year: data.academicLevel } : {}),
-          ...(data.studentId !== undefined ? { student_id_number: data.studentId } : {}),
-          ...(data.profilePhoto !== undefined ? { avatar_url: data.profilePhoto } : {}),
-        }).then(({ error }) => {
-          if (error) console.warn('[Supabase Profile Update]:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('Profile sync notice:', e);
-    }
-
     showToast('Profile updated successfully.', 'success');
-  }, [showToast, user?.id]);
+  }, [showToast]);
 
   const resetToDefaultData = useCallback(() => {
     removeAvatarFromDB().catch(() => {});
@@ -943,104 +874,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const login = useCallback(async (email: string, password?: string, isDemo: boolean = false) => {
     try {
-      const supabase = getSupabaseClient();
       const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) throw new Error('Please enter your email address.');
 
-      if (supabase && normalizedEmail && password && !isDemo) {
-        const { data: sbAuthData, error: sbAuthErr } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password: password,
-        });
+      const existingUsers = getLocalItem<any[]>('campusly_users', []);
+      const matchedUser = existingUsers.find(
+        (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
+      );
 
-        if (sbAuthErr) {
-          throw new Error(sbAuthErr.message);
+      if (matchedUser) {
+        if (matchedUser.status === 'inactive') {
+          throw new Error('This account has been deactivated by administrator.');
         }
 
-        if (sbAuthData?.user) {
-          const userId = sbAuthData.user.id;
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-
-          const studentName =
-            profile?.full_name ||
-            profile?.name ||
-            sbAuthData.user.user_metadata?.full_name ||
-            sbAuthData.user.user_metadata?.name ||
-            normalizedEmail.split('@')[0];
-
-          const studentUser: User = {
-            id: userId,
-            name: studentName,
-            email: normalizedEmail,
-            university: profile?.university_name || profile?.institution || 'Campus University',
-            institution: profile?.university_name || profile?.institution || 'Campus University',
-            academicLevel: profile?.class_year || profile?.academic_level || '1st Year',
-            semester: profile?.class_year || profile?.academic_level || '1st Year',
-            studentId: profile?.student_id_number || profile?.student_id || undefined,
-            department: profile?.department || 'General Studies',
-            role: (profile?.role as any) || 'student',
-            status: (profile?.status as any) || 'active',
-            profilePhoto: profile?.avatar_url || profile?.profile_photo || '',
-            preferences: {
-              theme: 'dark',
-              currency: 'BDT',
-              currencySymbol: '৳',
-              dailyStudyGoalMinutes: 120,
-              notifications: true,
-              onboardingCompleted: true,
-              weekStartsOn: 1,
-            },
-            createdAt: profile?.created_at || new Date().toISOString(),
-            lastLoginAt: new Date().toISOString(),
-            loginCount: (profile?.login_count || 1) + 1,
-          };
-
-          const sessionToken = sbAuthData.session?.access_token || `tok_${userId}_${Date.now()}`;
-          setUser(studentUser);
-          setToken(sessionToken);
-          setLocalItem('campusly_user', studentUser);
-          setLocalItem('campusly_token', sessionToken);
-
-          showToast(`Welcome back, ${studentUser.name}!`, 'success');
-          return;
+        if (password && matchedUser.password && matchedUser.password !== password) {
+          throw new Error('Incorrect password. Please verify your credentials.');
         }
+
+        // Update login stats
+        const updatedUser: User = {
+          ...matchedUser,
+          lastLoginAt: new Date().toISOString(),
+          loginCount: (matchedUser.loginCount || 1) + 1,
+        };
+
+        // Update stored users array
+        const updatedUsersList = existingUsers.map((u) =>
+          u.id === matchedUser.id ? { ...u, ...updatedUser } : u
+        );
+        setLocalItem('campusly_users', updatedUsersList);
+
+        const userToken = `tok_${updatedUser.id}_${Date.now()}`;
+        setUser(updatedUser);
+        setToken(userToken);
+        setLocalItem('campusly_current_user', updatedUser);
+        setLocalItem('campusly_user', updatedUser);
+        setLocalItem('campusly_token', userToken);
+
+        showToast(`Welcome back, ${updatedUser.name}!`, 'success');
+        return;
       }
 
-      // Fallback for demo or offline dev mode
-      const localId = `stu_${Date.now()}`;
-      const fallbackUser: User = {
-        id: localId,
-        name: normalizedEmail.split('@')[0] || 'Student',
-        email: normalizedEmail,
-        university: 'University Campus',
-        institution: 'University Campus',
-        academicLevel: '1st Year',
-        semester: '1st Year',
-        role: 'student',
-        status: 'active',
-        profilePhoto: '',
-        preferences: {
-          theme: 'dark',
-          currency: 'BDT',
-          currencySymbol: '৳',
-          dailyStudyGoalMinutes: 120,
-          notifications: true,
-          onboardingCompleted: true,
-          weekStartsOn: 1,
-        },
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1,
-      };
-      const fallbackToken = `tok_${localId}_${Date.now()}`;
-      setUser(fallbackUser);
-      setToken(fallbackToken);
-      setLocalItem('campusly_user', fallbackUser);
-      setLocalItem('campusly_token', fallbackToken);
-      showToast(`Welcome back, ${fallbackUser.name}!`, 'success');
+      // Fallback for demo or student quick access
+      if (isDemo || normalizedEmail.includes('demo') || normalizedEmail.includes('student')) {
+        const localId = `stu_${Date.now()}`;
+        const newDemoUser: User = {
+          id: localId,
+          name: normalizedEmail.split('@')[0].replace(/[._-]/g, ' ') || 'Student',
+          email: normalizedEmail,
+          university: 'Campus University',
+          institution: 'Campus University',
+          academicLevel: '1st Year',
+          semester: '1st Year',
+          role: 'student',
+          status: 'active',
+          profilePhoto: '',
+          preferences: {
+            theme: 'dark',
+            currency: 'BDT',
+            currencySymbol: '৳',
+            dailyStudyGoalMinutes: 120,
+            notifications: true,
+            onboardingCompleted: true,
+            weekStartsOn: 1,
+          },
+          createdAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1,
+        };
+
+        existingUsers.push({ ...newDemoUser, password: password || 'password123' });
+        setLocalItem('campusly_users', existingUsers);
+
+        const fallbackToken = `tok_${localId}_${Date.now()}`;
+        setUser(newDemoUser);
+        setToken(fallbackToken);
+        setLocalItem('campusly_current_user', newDemoUser);
+        setLocalItem('campusly_user', newDemoUser);
+        setLocalItem('campusly_token', fallbackToken);
+        showToast(`Welcome back, ${newDemoUser.name}!`, 'success');
+        return;
+      }
+
+      throw new Error('No account found with this email address. Please click Sign Up to create your account.');
     } catch (err: any) {
       const errorMsg = err?.message || 'Login failed. Please check your credentials.';
       showToast(errorMsg, 'error');
@@ -1054,7 +970,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const adminLogin = useCallback(async (email: string, password: string) => {
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      // Admin credential check
+      if (!normalizedEmail) throw new Error('Please enter your admin email address.');
+      if (!password) throw new Error('Please enter your admin password.');
+
       if (
         normalizedEmail === 'admin@campusly.internal' ||
         normalizedEmail === 'admin@campusly.app' ||
@@ -1087,13 +1005,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const adminToken = `tok_admin_${Date.now()}`;
         setUser(adminUser);
         setToken(adminToken);
+        setLocalItem('campusly_current_user', adminUser);
         setLocalItem('campusly_user', adminUser);
         setLocalItem('campusly_token', adminToken);
         showToast('Admin access granted. Welcome to Campusly Admin Console.', 'success');
         return;
       }
 
-      throw new Error('Invalid Administrator credentials.');
+      throw new Error('Invalid Administrator credentials. Please verify your admin email.');
     } catch (err: any) {
       const errorMsg = err?.message || 'Admin authentication failed.';
       showToast(errorMsg, 'error');
@@ -1106,65 +1025,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const register = useCallback(async (formData: RegisterFormData) => {
     try {
-      const supabase = getSupabaseClient();
-      if (!supabase) {
-        throw new Error('Supabase client connection is unavailable. Please verify network or credentials.');
-      }
-
       const normalizedEmail = formData.email.trim().toLowerCase();
+      const normalizedName = formData.name.trim();
+      const normalizedInst = formData.institution.trim();
+      const normalizedLevel = formData.academicLevel.trim();
 
-      // 1. Direct Supabase Client Sign-Up
-      const { data: sbAuthData, error: sbAuthErr } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.name.trim(),
-            university_name: formData.institution.trim(),
-            class_year: formData.academicLevel.trim(),
-            student_id_number: formData.studentId?.trim() || '',
-          },
-        },
-      });
+      if (!normalizedName) throw new Error('Please enter your full name.');
+      if (!normalizedEmail) throw new Error('Please enter your email address.');
+      if (!formData.password || formData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+      if (!normalizedInst) throw new Error('Please enter your institution / university name.');
+      if (!normalizedLevel) throw new Error('Please enter your class / academic year.');
 
-      if (sbAuthErr) {
-        console.error('[Supabase Auth SignUp Error]:', sbAuthErr);
-        throw new Error(sbAuthErr.message);
+      const existingUsers = getLocalItem<any[]>('campusly_users', []);
+      const userExists = existingUsers.some(
+        (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
+      );
+
+      if (userExists) {
+        throw new Error('An account with this email already exists. Please sign in instead.');
       }
 
-      if (!sbAuthData?.user?.id) {
-        throw new Error('Sign-up failed: Supabase did not return user details.');
-      }
+      const userId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      const userId = sbAuthData.user.id;
-
-      // 2. Direct Profile Upsert into Supabase `profiles` table
-      if (sbAuthData.user) {
-        const { error: profileErr } = await supabase.from('profiles').upsert({
-          id: userId,
-          full_name: formData.name.trim(),
-          email: normalizedEmail,
-          university_name: formData.institution.trim(),
-          class_year: formData.academicLevel.trim(),
-          student_id_number: formData.studentId?.trim() || '',
-          avatar_url: null,
-          role: 'student',
-        });
-
-        if (profileErr) {
-          console.error('Profile creation error:', profileErr);
-        }
-      }
-
-      // 3. Clean fresh session state for the new student
       const newUser: User = {
         id: userId,
-        name: formData.name.trim(),
+        name: normalizedName,
         email: normalizedEmail,
-        university: formData.institution.trim(),
-        institution: formData.institution.trim(),
-        academicLevel: formData.academicLevel.trim(),
-        semester: formData.academicLevel.trim(),
+        university: normalizedInst,
+        institution: normalizedInst,
+        academicLevel: normalizedLevel,
+        semester: normalizedLevel,
         studentId: formData.studentId?.trim() || undefined,
         department: formData.department?.trim() || 'General Studies',
         role: 'student',
@@ -1184,9 +1076,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginCount: 1,
       };
 
-      const userToken = sbAuthData.session?.access_token || `tok_${userId}_${Date.now()}`;
+      // 1. Direct LocalStorage Persistence into 'campusly_users'
+      const storedUserRecord = {
+        ...newUser,
+        password: formData.password,
+      };
+      existingUsers.push(storedUserRecord);
+      setLocalItem('campusly_users', existingUsers);
 
-      // Reset data collections to blank arrays for new student
+      // 2. Direct LocalStorage Persistence into 'campusly_current_user' and 'campusly_user'
+      const userToken = `tok_${userId}_${Date.now()}`;
+      setLocalItem('campusly_current_user', newUser);
+      setLocalItem('campusly_user', newUser);
+      setLocalItem('campusly_token', userToken);
+
+      // 3. Reset data collections for the new student
       setSubjects([]);
       setTasks([]);
       setExpenses([]);
@@ -1194,7 +1098,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStudySessions([]);
       setEvents([]);
       setPresentations([]);
-      setNotifications([]);
+      setNotifications([
+        {
+          id: `notif_${Date.now()}`,
+          userId: userId,
+          type: 'system',
+          title: `Welcome to Campusly, ${normalizedName}! 🎓`,
+          message: 'Your student account is active. Explore smart study timers, AI assistance, notes, and academic planning.',
+          date: new Date().toISOString(),
+          read: false,
+          link: '/dashboard',
+        }
+      ]);
       setNotes([]);
 
       if (typeof window !== 'undefined') {
@@ -1205,15 +1120,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.removeItem('campusly_study_sessions');
         localStorage.removeItem('campusly_events');
         localStorage.removeItem('campusly_presentations');
-        localStorage.removeItem('campusly_notifications');
         localStorage.removeItem('campusly_notes');
         localStorage.removeItem('campusly_active_timer');
       }
 
       setUser(newUser);
       setToken(userToken);
-      setLocalItem('campusly_user', newUser);
-      setLocalItem('campusly_token', userToken);
 
       showToast(`Account created! Welcome to Campusly, ${newUser.name}.`, 'success');
     } catch (err: any) {
@@ -1230,6 +1142,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUser(null);
     setToken(null);
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('campusly_current_user');
       localStorage.removeItem('campusly_user');
       localStorage.removeItem('campusly_token');
       localStorage.removeItem('campusly_subjects');

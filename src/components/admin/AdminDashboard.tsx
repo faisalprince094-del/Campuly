@@ -56,20 +56,86 @@ export const AdminDashboard: React.FC = () => {
       else setIsRefreshing(true);
 
       try {
-        const queryParams = new URLSearchParams({
-          q: searchQuery,
-          status: statusFilter,
-          institution: institutionFilter,
-          level: levelFilter,
-        });
+        // Read local students from localStorage 'campusly_users'
+        let localUsers: any[] = [];
+        try {
+          const raw = localStorage.getItem('campusly_users');
+          if (raw) {
+            localUsers = JSON.parse(raw);
+          }
+        } catch {
+          localUsers = [];
+        }
 
-        const [statsRes, studentsRes] = await Promise.all([
-          apiRequest<AdminDashboardStats>('/api/admin/stats'),
-          apiRequest<StudentAdminRecord[]>(`/api/admin/students?${queryParams.toString()}`),
-        ]);
+        // Map to StudentAdminRecord structure
+        let studentRecords: StudentAdminRecord[] = (localUsers || []).map((u) => ({
+          id: u.id,
+          name: u.name || 'Student',
+          email: u.email || '',
+          studentId: u.studentId || u.student_id || 'N/A',
+          institution: u.institution || u.university || 'General University',
+          academicLevel: u.academicLevel || u.semester || '1st Year',
+          department: u.department || 'General Studies',
+          semester: u.semester || u.academicLevel || '1st Year',
+          role: (u.role as any) || 'student',
+          status: (u.status as any) || 'active',
+          profilePhoto: u.profilePhoto || '',
+          createdAt: u.createdAt || new Date().toISOString(),
+          lastLoginAt: u.lastLoginAt || u.createdAt || new Date().toISOString(),
+          loginCount: u.loginCount || 1,
+          stats: {
+            tasksCount: u.stats?.tasksCount || 0,
+            completedTasksCount: u.stats?.completedTasksCount || 0,
+            studyMinutes: u.stats?.studyMinutes || 0,
+            studySessionsCount: u.stats?.studySessionsCount || 0,
+            expensesCount: u.stats?.expensesCount || 0,
+            presentationsCount: u.stats?.presentationsCount || 0,
+            notesCount: u.stats?.notesCount || 0,
+          },
+        }));
 
-        setStats(statsRes || null);
-        setStudents(Array.isArray(studentsRes) ? studentsRes : []);
+        // Apply filters locally
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          studentRecords = studentRecords.filter(
+            (s) =>
+              s.name.toLowerCase().includes(q) ||
+              s.email.toLowerCase().includes(q) ||
+              s.institution.toLowerCase().includes(q) ||
+              (s.studentId && s.studentId.toLowerCase().includes(q))
+          );
+        }
+
+        if (statusFilter !== 'all') {
+          studentRecords = studentRecords.filter((s) => s.status === statusFilter);
+        }
+
+        if (institutionFilter !== 'all') {
+          studentRecords = studentRecords.filter((s) => s.institution === institutionFilter);
+        }
+
+        if (levelFilter !== 'all') {
+          studentRecords = studentRecords.filter((s) => s.academicLevel === levelFilter);
+        }
+
+        // Compute local stats
+        const activeCount = studentRecords.filter((s) => s.status === 'active').length;
+        const inactiveCount = studentRecords.filter((s) => s.status === 'inactive').length;
+
+        const calculatedStats: AdminDashboardStats = {
+          totalStudents: studentRecords.length,
+          activeStudents: activeCount,
+          inactiveStudents: inactiveCount,
+          recentRegistrationsCount: studentRecords.length,
+          recentActiveCount: activeCount,
+          totalTasks: 0,
+          totalStudyHours: 0,
+          totalExpensesLogged: 0,
+          totalPresentationsCreated: 0,
+        };
+
+        setStats(calculatedStats);
+        setStudents(studentRecords);
       } catch (err: any) {
         showToast(err.message || 'Failed to load administrative records.', 'error');
       } finally {
@@ -106,10 +172,19 @@ export const AdminDashboard: React.FC = () => {
     setUpdatingStudentId(student.id);
 
     try {
-      await apiRequest(`/api/admin/students/${student.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      });
+      // Update in LocalStorage
+      try {
+        const raw = localStorage.getItem('campusly_users');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const updated = list.map((u: any) =>
+            u.id === student.id ? { ...u, status: newStatus } : u
+          );
+          localStorage.setItem('campusly_users', JSON.stringify(updated));
+        }
+      } catch (e) {
+        console.warn('Local users update notice:', e);
+      }
 
       setStudents((prev) =>
         prev.map((s) => (s.id === student.id ? { ...s, status: newStatus } : s))
@@ -145,9 +220,17 @@ export const AdminDashboard: React.FC = () => {
     setIsDeleting(true);
 
     try {
-      await apiRequest(`/api/admin/students/${studentToDelete.id}`, {
-        method: 'DELETE',
-      });
+      // Delete from LocalStorage
+      try {
+        const raw = localStorage.getItem('campusly_users');
+        if (raw) {
+          const list = JSON.parse(raw);
+          const filtered = list.filter((u: any) => u.id !== studentToDelete.id);
+          localStorage.setItem('campusly_users', JSON.stringify(filtered));
+        }
+      } catch (e) {
+        console.warn('Local users delete notice:', e);
+      }
 
       setStudents((prev) => prev.filter((s) => s.id !== studentToDelete.id));
       if (selectedStudent && selectedStudent.id === studentToDelete.id) {
@@ -156,7 +239,7 @@ export const AdminDashboard: React.FC = () => {
 
       // Refresh stats
       fetchAdminData(true);
-      showToast(`Student ${studentToDelete.name} and isolated data deleted.`, 'info');
+      showToast(`Student ${studentToDelete.name} and records deleted.`, 'info');
       setStudentToDelete(null);
     } catch (err: any) {
       showToast(err.message || 'Failed to delete student account.', 'error');

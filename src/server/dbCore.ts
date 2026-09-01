@@ -10,7 +10,6 @@ import {
 } from './authCore';
 export { sanitizeUser };
 import { User, Subject, Task, Expense, Budget, StudySession, UniversityEvent, Presentation, AppNotification, Note } from '../types';
-import { getSupabaseClient } from '../utils/supabase';
 
 // Serverless-safe storage directory (/tmp is writeable in AWS Lambda / Vercel Serverless)
 const isServerlessEnv = Boolean(
@@ -325,48 +324,6 @@ export function registerStudent(rawBody: any): { status: number; data: any } {
 
     saveDB(db);
 
-    // Sync student record to Supabase database (non-blocking)
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        const profilePayload: Record<string, any> = {
-          full_name: name.trim(),
-          name: name.trim(),
-          email: normalizedEmail,
-          university_name: instName,
-          institution: instName,
-          class_year: levelName,
-          academic_level: levelName,
-          student_id_number: (studentId || '').trim(),
-          student_id: (studentId || '').trim(),
-          department: (department || 'General Studies').trim(),
-          avatar_url: null,
-          profile_photo: '',
-          role: 'student',
-          status: 'active',
-          created_at: new Date().toISOString(),
-          last_login_at: new Date().toISOString(),
-        };
-        if (supabaseUserId) {
-          profilePayload.id = supabaseUserId;
-        }
-
-        Promise.resolve(supabase.from('profiles').upsert(profilePayload))
-          .then((res: any) => {
-            if (res && res.error) {
-              console.warn('[Supabase Sync Notice] Profiles table upsert:', res.error.message);
-            } else {
-              console.log('[Supabase Sync] Student record synced to Supabase successfully.');
-            }
-          })
-          .catch((err: any) => {
-            console.warn('[Supabase Sync Warning]:', err?.message || err);
-          });
-      }
-    } catch (sbErr) {
-      console.warn('[Supabase Sync Handler Caught]:', sbErr);
-    }
-
     const token = createSessionToken(newUserId, 'student');
     console.log('[Auth API] Student registered successfully:', newUserId);
     return {
@@ -458,21 +415,6 @@ export function loginStudent(rawBody: any): { status: number; data: any } {
     user.lastLoginAt = new Date().toISOString();
     user.loginCount = (user.loginCount || 0) + 1;
     saveDB(db);
-
-    // Sync last login to Supabase
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        Promise.resolve(
-          supabase
-            .from('profiles')
-            .update({ last_login_at: user.lastLoginAt })
-            .eq('email', normalizedEmail)
-        )
-          .then(() => {})
-          .catch(() => {});
-      }
-    } catch {}
 
     const token = createSessionToken(user.id, user.role || 'student');
     return {
