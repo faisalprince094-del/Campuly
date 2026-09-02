@@ -21,15 +21,23 @@ import { motion } from 'motion/react';
 type AuthMode = 'signin' | 'signup' | 'admin';
 
 export const AuthView: React.FC = () => {
-  const { login, adminLogin, register, showToast } = useApp();
+  const { login, adminLogin, register, showToast, authMode, setAuthMode, accountRemovedNotice, setAccountRemovedNotice } = useApp();
 
-  const [mode, setMode] = useState<AuthMode>('signin');
+  const [mode, setMode] = useState<AuthMode>(authMode || 'signin');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Sync mode with context authMode if set externally (e.g. redirected to signup on account deletion)
+  useEffect(() => {
+    if (authMode) {
+      setMode(authMode);
+    }
+  }, [authMode]);
+
   const handleModeChange = (newMode: AuthMode) => {
     setMode(newMode);
+    setAuthMode(newMode);
     setErrorMessage(null);
   };
 

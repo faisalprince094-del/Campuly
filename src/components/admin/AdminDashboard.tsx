@@ -335,34 +335,72 @@ export const AdminDashboard: React.FC = () => {
     if (!studentToDelete) return;
     setIsDeleting(true);
 
+    const studentEmail = (studentToDelete.email || '').trim();
+    const studentId = studentToDelete.id;
+
     try {
-      // Delete from Supabase via direct REST
-      try {
-        await deleteProfileDirectRest(studentToDelete.email || studentToDelete.id);
-      } catch (supaErr) {
-        console.warn('Supabase REST profile delete error:', supaErr);
+      // 1. Perform direct REST DELETE request to Supabase Student details table
+      if (studentEmail) {
+        try {
+          await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details?email=eq." + encodeURIComponent(studentEmail), {
+            method: "DELETE",
+            headers: {
+              "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+              "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI"
+            }
+          });
+        } catch (supaErr) {
+          console.warn('Supabase direct REST delete error:', supaErr);
+        }
       }
 
-      // Delete from LocalStorage
+      // Also clean up by direct helper function
+      try {
+        await deleteProfileDirectRest(studentEmail || studentId);
+      } catch (e) {
+        console.warn('deleteProfileDirectRest error:', e);
+      }
+
+      // Delete from LocalStorage backup
       try {
         const raw = localStorage.getItem('campusly_users');
         if (raw) {
           const list = JSON.parse(raw);
-          const filtered = list.filter((u: any) => u.id !== studentToDelete.id && (!studentToDelete.email || u.email?.toLowerCase() !== studentToDelete.email.toLowerCase()));
+          const filtered = list.filter((u: any) => u.id !== studentId && (!studentEmail || u.email?.toLowerCase() !== studentEmail.toLowerCase()));
           localStorage.setItem('campusly_users', JSON.stringify(filtered));
         }
       } catch (e) {
         console.warn('Local users delete notice:', e);
       }
 
-      setStudents((prev) => prev.filter((s) => s.id !== studentToDelete.id));
-      if (selectedStudent && selectedStudent.id === studentToDelete.id) {
+      // 2. Remove the deleted student from Admin Dashboard UI state immediately
+      setStudents((prev) =>
+        prev.filter(
+          (s) =>
+            s.id !== studentId &&
+            (!studentEmail || s.email?.toLowerCase() !== studentEmail.toLowerCase())
+        )
+      );
+
+      if (
+        selectedStudent &&
+        (selectedStudent.id === studentId ||
+          (studentEmail && selectedStudent.email?.toLowerCase() === studentEmail.toLowerCase()))
+      ) {
         setSelectedStudent(null);
       }
 
-      // Refresh stats
-      fetchAdminData(true);
-      showToast(`Student ${studentToDelete.name} and records deleted.`, 'info');
+      // Update statistics immediately
+      setStats((prev) => ({
+        ...prev,
+        totalUsers: Math.max(0, prev.totalUsers - 1),
+        activeStudents:
+          studentToDelete.status === 'active'
+            ? Math.max(0, prev.activeStudents - 1)
+            : prev.activeStudents,
+      }));
+
+      showToast(`Student ${studentToDelete.name} deleted successfully.`, 'info');
       setStudentToDelete(null);
     } catch (err: any) {
       showToast(err.message || 'Failed to delete student account.', 'error');

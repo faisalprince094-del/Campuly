@@ -102,6 +102,10 @@ interface AppContextType {
   markAllNotificationsRead: () => Promise<void>;
   
   // Auth & Onboarding
+  authMode: 'signin' | 'signup' | 'admin';
+  setAuthMode: (mode: 'signin' | 'signup' | 'admin') => void;
+  accountRemovedNotice: string | null;
+  setAccountRemovedNotice: (notice: string | null) => void;
   login: (email: string, password?: string, isDemo?: boolean) => Promise<void>;
   adminLogin: (email: string, password: string) => Promise<void>;
   register: (formData: RegisterFormData) => Promise<void>;
@@ -249,6 +253,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   });
 
+  // Auth Mode and Account Notice State
+  const [authMode, setAuthModeState] = useState<'signin' | 'signup' | 'admin'>('signin');
+  const [accountRemovedNotice, setAccountRemovedNotice] = useState<string | null>(null);
+
+  const setAuthMode = useCallback((mode: 'signin' | 'signup' | 'admin') => {
+    setAuthModeState(mode);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('campusly_auth_mode', mode);
+      } catch {}
+    }
+  }, []);
+
   // Toasts & Theme
   const [toasts, setToasts] = useState<ToastInfo[]>([]);
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
@@ -385,65 +402,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Background Migration: Auto-migrate any un-synced LocalStorage student records to Supabase on app startup via REST API
-  useEffect(() => {
-    const migrateLocalUsersToSupabase = async () => {
-      try {
-        const localUsers = getLocalItem<any[]>('campusly_users', []);
-        if (!Array.isArray(localUsers) || localUsers.length === 0) return;
+  // Active Student Session Guard (Auto-Kick on Admin Deletion)
+  const isKickingRef = useRef(false);
+  const isCheckingSessionRef = useRef(false);
 
-        // Fetch existing emails in Supabase via direct REST to avoid duplicates
-        const res = await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles?select=email", {
+  const checkStudentAccountStatus = useCallback(async (emailToCheck?: string) => {
+    const targetEmail = (emailToCheck || user?.email || '').trim().toLowerCase();
+    // Only verify for students with a valid email (skip admin)
+    if (!targetEmail || user?.role === 'admin') return;
+    if (isKickingRef.current || isCheckingSessionRef.current) return;
+
+    isCheckingSessionRef.current = true;
+    try {
+      const res = await fetch(
+        "https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details?email=eq." + encodeURIComponent(targetEmail) + "&select=id,email",
+        {
+          method: "GET",
           headers: {
             "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
             "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
           },
-        });
-        if (!res.ok) return;
-        const existingProfiles = await res.json();
-        const existingEmailSet = new Set(
-          (existingProfiles || []).map((p: any) => (p.email || '').toLowerCase().trim())
-        );
+        }
+      );
 
-        // Find users present in local storage but missing in Supabase
-        const usersToSync = localUsers.filter((u: any) => {
-          const email = (u.email || '').toLowerCase().trim();
-          return email && !existingEmailSet.has(email) && !email.includes('admin');
-        });
+      let isDeleted = false;
+      if (res.status === 404) {
+        isDeleted = true;
+      } else if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length === 0) {
+          isDeleted = true;
+        }
+      }
 
-        for (const u of usersToSync) {
+      if (isDeleted && !isKickingRef.current) {
+        isKickingRef.current = true;
+        const kickMsg = "Your account has been removed by the Administrator. Please sign up again if needed.";
+
+        // a. Trigger browser alert / popup notice
+        setAccountRemovedNotice(kickMsg);
+        if (typeof window !== 'undefined') {
           try {
-            await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
-              method: "POST",
-              headers: {
-                "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
-                "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-              },
-              body: JSON.stringify({
-                full_name: u.name || u.full_name || 'Student',
-                email: (u.email || '').toLowerCase().trim(),
-                university_name: u.university_name || u.institution || u.university || 'Campus University',
-                student_id: u.student_id || u.studentId || null,
-                password: u.password || 'password123',
-                academic_level: u.academic_level || u.academicLevel || u.semester || '1st Year',
-                department: u.department || 'General Studies',
-                role: u.role || 'student',
-                status: u.status || 'active',
-              }),
-            });
-          } catch {
-            // continue
+            alert(kickMsg);
+          } catch (e) {
+            console.warn('Alert notification error:', e);
           }
         }
-      } catch (migrationErr) {
-        console.warn('Background Supabase REST migration note:', migrationErr);
+
+        // b. Clear all local session storage / state (localStorage.clear())
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.clear();
+            sessionStorage.clear();
+          } catch (e) {
+            console.warn('Storage clearing notice:', e);
+          }
+        }
+
+        // Reset all application state
+        setUser(null);
+        setToken(null);
+        setSubjects([]);
+        setTasks([]);
+        setExpenses([]);
+        setBudget(null);
+        setStudySessions([]);
+        setEvents([]);
+        setPresentations([]);
+        setNotifications([]);
+        setNotes([]);
+
+        // c. Instantly redirect the student back to the Sign-Up / Landing page
+        setAuthMode('signup');
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem('campusly_auth_mode', 'signup');
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Student session verification check notice:', err);
+    } finally {
+      isCheckingSessionRef.current = false;
+    }
+  }, [user, setAuthMode]);
+
+  // Session guard: periodic interval (5s) and on navigation / visibility / focus change
+  useEffect(() => {
+    if (!user || user.role === 'admin' || !user.email) return;
+
+    isKickingRef.current = false;
+    checkStudentAccountStatus();
+
+    const intervalId = setInterval(() => {
+      checkStudentAccountStatus();
+    }, 5000);
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        checkStudentAccountStatus();
       }
     };
 
-    migrateLocalUsersToSupabase();
-  }, []);
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
+  }, [user, activeTab, subTab, checkStudentAccountStatus]);
 
   // Verify session on initial app load using 100% LocalStorage
   useEffect(() => {
@@ -460,6 +529,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (activeUser && isMounted) {
         setUser(activeUser);
         setToken(savedToken);
+
+        // Immediate background validation against Supabase for student accounts
+        if (activeUser.email && activeUser.role !== 'admin') {
+          checkStudentAccountStatus(activeUser.email);
+        }
       }
     } catch (err: any) {
       console.warn('LocalStorage session verification notice:', err);
@@ -472,7 +546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [checkStudentAccountStatus]);
 
   // Global Timer Interval (calculates exact elapsed seconds using timestamps)
   useEffect(() => {
@@ -955,11 +1029,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normalizedEmail = email.trim().toLowerCase();
       if (!normalizedEmail) throw new Error('Please enter your email address.');
 
-      // 1. Query Supabase Central Cloud Database profiles table via REST API
+      // 1. Query Supabase "Student details" table via direct REST API
       let cloudProfile: any = null;
       try {
         const res = await fetch(
-          `https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles?email=ilike.${encodeURIComponent(normalizedEmail)}&select=*`,
+          `https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details?email=eq.${encodeURIComponent(normalizedEmail)}&select=*`,
           {
             method: 'GET',
             headers: {
@@ -976,7 +1050,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       } catch (supaErr) {
-        console.warn('Supabase REST profile query note:', supaErr);
+        console.warn('Supabase REST Student details query note:', supaErr);
       }
 
       if (cloudProfile) {
@@ -1038,66 +1112,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // 2. Fallback to LocalStorage registered accounts (with on-the-fly Supabase migration)
+      // If NOT found in Supabase Student details table:
+      // Purge any stale local copy so deleted accounts cannot log in!
       const existingUsers = getLocalItem<any[]>('campusly_users', []);
-      const matchedUser = existingUsers.find(
-        (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
+      const purgedUsers = existingUsers.filter(
+        (u) => !u.email || u.email.trim().toLowerCase() !== normalizedEmail
       );
-
-      if (matchedUser) {
-        if (matchedUser.status === 'inactive') {
-          throw new Error('This account has been deactivated by administrator.');
-        }
-
-        if (password && matchedUser.password && matchedUser.password !== password) {
-          throw new Error('Incorrect password. Please verify your credentials.');
-        }
-
-        // On-the-fly migrate this local user into Supabase profiles table via direct REST
-        try {
-          await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
-            method: "POST",
-            headers: {
-              "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
-              "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
-              "Content-Type": "application/json",
-              "Prefer": "return=minimal",
-            },
-            body: JSON.stringify({
-              full_name: matchedUser.name || matchedUser.full_name || 'Student',
-              email: normalizedEmail,
-              university_name: matchedUser.university_name || matchedUser.institution || matchedUser.university || 'Campus University',
-              student_id: matchedUser.student_id || matchedUser.studentId || null,
-              password: password || matchedUser.password || 'password123',
-            }),
-          });
-        } catch (syncErr) {
-          console.warn('On-the-fly Supabase REST notice during login:', syncErr);
-        }
-
-        // Update login stats
-        const updatedUser: User = {
-          ...matchedUser,
-          lastLoginAt: new Date().toISOString(),
-          loginCount: (matchedUser.loginCount || 1) + 1,
-        };
-
-        // Update stored users array
-        const updatedUsersList = existingUsers.map((u) =>
-          u.id === matchedUser.id ? { ...u, ...updatedUser } : u
-        );
-        setLocalItem('campusly_users', updatedUsersList);
-
-        const userToken = `tok_${updatedUser.id}_${Date.now()}`;
-        setUser(updatedUser);
-        setToken(userToken);
-        setLocalItem('campusly_current_user', updatedUser);
-        setLocalItem('campusly_user', updatedUser);
-        setLocalItem('campusly_token', userToken);
-
-        showToast(`Welcome back, ${updatedUser.name}!`, 'success');
-        return;
-      }
+      setLocalItem('campusly_users', purgedUsers);
 
       // Fallback for demo or student quick access
       if (isDemo || normalizedEmail.includes('demo') || normalizedEmail.includes('student')) {
@@ -1273,20 +1294,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!normalizedInst) throw new Error('Please enter your institution / university name.');
       if (!normalizedLevel) throw new Error('Please enter your class / academic year.');
 
-      const existingUsers = getLocalItem<any[]>('campusly_users', []);
-      const userExists = existingUsers.some(
-        (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail
-      );
+      // 1. Live check in Supabase "Student details" table if this email already exists
+      let emailExistsInCloud = false;
+      try {
+        const checkRes = await fetch(
+          `https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,email`,
+          {
+            method: 'GET',
+            headers: {
+              'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+              'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+            },
+          }
+        );
+        if (checkRes.ok) {
+          const records = await checkRes.json();
+          if (Array.isArray(records) && records.length > 0) {
+            emailExistsInCloud = true;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Supabase student existence check notice:', checkErr);
+      }
 
-      if (userExists) {
+      if (emailExistsInCloud) {
         throw new Error('An account with this email already exists. Please sign in instead.');
       }
 
+      // If NOT in Supabase Student details (e.g. freshly deleted by Admin or never existed),
+      // purge any stale local user records with this email so re-registration is 100% clean and unblocked
+      const rawStoredUsers = getLocalItem<any[]>('campusly_users', []);
+      const purgedStoredUsers = rawStoredUsers.filter(
+        (u) => !u.email || u.email.trim().toLowerCase() !== normalizedEmail
+      );
+      setLocalItem('campusly_users', purgedStoredUsers);
+
       const userId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      // 1. Direct fetch POST request to Supabase REST API
+      // 2. Direct fetch POST request to Supabase "Student details" REST API
       try {
-        await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
+        const insertRes = await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details", {
           method: "POST",
           headers: {
             "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
@@ -1300,25 +1347,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             university_name: normalizedInst,
             student_id: formData.studentId?.trim() || null,
             password: formData.password,
+            academic_level: normalizedLevel,
+            department: formData.department?.trim() || 'General Studies',
+            role: 'student',
+            status: 'active',
           }),
-        })
-          .then(async (res) => {
-            if (!res.ok) {
-              const errBody = await res.text().catch(() => "");
-              throw new Error("Status " + res.status + (errBody ? " - " + errBody : ""));
-            }
-            if (typeof window !== 'undefined') {
-              alert("Data Saved to Supabase Successfully!");
-            }
-          })
-          .catch((err) => {
-            console.warn("Supabase REST API Error:", err);
-            if (typeof window !== 'undefined') {
-              alert("Supabase API Error: " + err.message);
-            }
-          });
+        });
+
+        if (!insertRes.ok) {
+          const errBody = await insertRes.text().catch(() => "");
+          console.warn(`Supabase Student details insert status ${insertRes.status}:`, errBody);
+        } else {
+          if (typeof window !== 'undefined') {
+            alert("Data Saved to Supabase Successfully!");
+          }
+        }
       } catch (supaErr: any) {
-        console.warn('Supabase cloud profile insert error:', supaErr);
+        console.warn('Supabase Student details insert error:', supaErr);
       }
 
       const newUser: User = {
@@ -1564,6 +1609,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         duplicatePresentation,
         markNotificationRead,
         markAllNotificationsRead,
+        authMode,
+        setAuthMode,
+        accountRemovedNotice,
+        setAccountRemovedNotice,
         login,
         adminLogin,
         register,

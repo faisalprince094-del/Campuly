@@ -238,15 +238,15 @@ export async function updateProfileStatusDirectRest(emailOrId: string, status: s
 }
 
 /**
- * Direct REST API call to delete a profile
+ * Direct REST API call to delete a student profile from "Student details" table
  */
 export async function deleteProfileDirectRest(emailOrId: string): Promise<boolean> {
   const isEmail = emailOrId.includes("@");
   const queryParam = isEmail
-    ? `email=ilike.${encodeURIComponent(emailOrId.trim())}`
+    ? `email=eq.${encodeURIComponent(emailOrId.trim())}`
     : `id=eq.${encodeURIComponent(emailOrId.trim())}`;
 
-  const response = await fetch(`${SUPABASE_PROFILES_ENDPOINT}?${queryParam}`, {
+  const response = await fetch(`${SUPABASE_STUDENT_DETAILS_ENDPOINT}?${queryParam}`, {
     method: "DELETE",
     headers: {
       "apikey": SUPABASE_ANON_KEY,
