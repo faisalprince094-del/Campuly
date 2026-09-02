@@ -47,99 +47,53 @@ export const AdminReportsSection: React.FC = () => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
-  // Fetch reports from Supabase REST endpoint and merge with local storage backup
+  // Fetch live reports directly from Supabase user_reports REST endpoint
   const fetchReports = useCallback(async (isSilent = false) => {
     if (!isSilent) setIsLoading(true);
     else setIsRefreshing(true);
 
     try {
-      let supaReports: any[] = [];
-      try {
-        // Direct REST call to Supabase as specified
-        const res = await fetch(
-          'https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports?select=*&order=created_at.desc',
-          {
-            method: 'GET',
-            headers: {
-              'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
-              'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
-            },
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            supaReports = data.map((r) => ({ ...r, source: 'supabase' }));
-          }
+      // Direct REST call to Supabase user_reports table as specified
+      const res = await fetch(
+        'https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports?select=*&order=created_at.desc',
+        {
+          method: 'GET',
+          headers: {
+            'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+            'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+          },
         }
-      } catch (err) {
-        console.warn('Supabase reports fetch notice:', err);
+      );
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`Supabase reports GET status ${res.status}:`, errText);
+        throw new Error(`Supabase returned status ${res.status}`);
       }
 
-      // Merge with local storage reports to ensure zero data loss
-      let localReports: any[] = [];
-      try {
-        const raw = localStorage.getItem('campusly_user_reports');
-        if (raw) {
-          localReports = JSON.parse(raw);
-        }
-      } catch {
-        localReports = [];
-      }
+      const data = await res.json();
+      const supaReports = Array.isArray(data) ? data : [];
 
-      // Also try fetching from local backend /api/user-reports if available
-      let backendReports: any[] = [];
-      try {
-        const bRes = await fetch('/api/user-reports');
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          if (Array.isArray(bData.reports)) {
-            backendReports = bData.reports;
-          }
-        }
-      } catch {
-        // Safe ignore
-      }
+      // Map directly from Supabase live records so both Admin Dashboard and Supabase Table Editor match exactly
+      const list: UserReportRecord[] = supaReports.map((item) => ({
+        id: String(item.id || ''),
+        email: item.email || 'No email provided',
+        report_description: item.report_description || item.description || '',
+        status: (item.status || 'pending').toLowerCase(),
+        created_at: item.created_at || new Date().toISOString(),
+        source: 'supabase',
+      }));
 
-      // Combine by id or unique signature (email + created_at)
-      const combinedMap = new Map<string, UserReportRecord>();
-
-      // Local/backend first
-      [...localReports, ...backendReports].forEach((item) => {
-        if (!item) return;
-        const key = item.id || `${item.email}_${item.created_at}`;
-        combinedMap.set(key, {
-          id: item.id || key,
-          email: item.email || 'anonymous@campusly.internal',
-          report_description: item.report_description || item.description || '',
-          status: (item.status || 'pending').toLowerCase(),
-          created_at: item.created_at || new Date().toISOString(),
-          source: item.source || 'local',
-        });
-      });
-
-      // Supabase reports overwrite / take priority
-      supaReports.forEach((item) => {
-        if (!item) return;
-        const key = item.id || `${item.email}_${item.created_at}`;
-        combinedMap.set(key, {
-          id: item.id || key,
-          email: item.email || 'anonymous@campusly.internal',
-          report_description: item.report_description || item.description || '',
-          status: (item.status || 'pending').toLowerCase(),
-          created_at: item.created_at || new Date().toISOString(),
-          source: 'supabase',
-        });
-      });
-
-      const list = Array.from(combinedMap.values());
       // Sort newest first
       list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setReports(list);
     } catch (err: any) {
-      console.error('Error loading reports:', err);
-      showToast('Could not load user reports.', 'error');
+      console.error('Error loading Supabase user_reports:', err);
+      setReports([]);
+      if (!isSilent) {
+        showToast('Could not load user reports from Supabase.', 'error');
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -154,36 +108,10 @@ export const AdminReportsSection: React.FC = () => {
   const handleUpdateStatus = async (reportId: string, newStatus: string) => {
     setUpdatingId(reportId);
     try {
-      // 1. Direct PATCH to Supabase
-      try {
-        await updateUserReportStatusDirectRest(reportId, newStatus);
-      } catch (e) {
-        console.warn('Supabase status update error:', e);
-      }
-
-      // 2. Update local storage cache
-      try {
-        const raw = localStorage.getItem('campusly_user_reports');
-        if (raw) {
-          const list = JSON.parse(raw);
-          const updated = list.map((r: any) =>
-            r.id === reportId ? { ...r, status: newStatus } : r
-          );
-          localStorage.setItem('campusly_user_reports', JSON.stringify(updated));
-        }
-      } catch (e) {
-        console.warn('Local reports update error:', e);
-      }
-
-      // 3. Update backend API
-      try {
-        await fetch(`/api/user-reports/${reportId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus }),
-        }).catch(() => {});
-      } catch {
-        // Safe ignore
+      // Direct PATCH to Supabase
+      const success = await updateUserReportStatusDirectRest(reportId, newStatus);
+      if (!success) {
+        console.warn('Direct REST status update to Supabase failed or returned non-ok');
       }
 
       setReports((prev) =>

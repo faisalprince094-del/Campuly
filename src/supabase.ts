@@ -38,7 +38,7 @@ export async function submitUserReportDirectRest(reportData: {
       return { ok: true, status: response.status };
     }
     const errText = await response.text().catch(() => "");
-    return { ok: false, status: response.status, message: errText };
+    return { ok: false, status: response.status, message: errText || "Failed to submit to Supabase" };
   } catch (err: any) {
     return { ok: false, status: 0, message: err?.message || "Network request failed" };
   }

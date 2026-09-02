@@ -15,6 +15,7 @@ import {
   Upload,
   Trash2,
   AlertCircle,
+  LifeBuoy,
   Check,
   LogOut,
 } from 'lucide-react';
@@ -25,7 +26,17 @@ import { validateImageFile, loadFileToImage } from '../../utils/imageStorage';
 import { calculateStudyStreak } from '../../utils/studyTracker';
 
 export const ProfilePage: React.FC = () => {
-  const { user, updateProfile, logout, studySessions, tasks, presentations, subjects, showToast } = useApp();
+  const {
+    user,
+    updateProfile,
+    logout,
+    studySessions,
+    tasks,
+    presentations,
+    subjects,
+    showToast,
+    setIsReportModalOpen,
+  } = useApp();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user?.name || '');
@@ -494,6 +505,43 @@ export const ProfilePage: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Help, Support & Direct Issue Reporting Section */}
+      <div
+        id="profile-support-section"
+        className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#0B1017] border border-slate-200/80 dark:border-[#1E293B] shadow-xs space-y-4 transition-colors"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-200/80 dark:border-amber-800/60 shadow-xs">
+              <LifeBuoy className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-[#F8FAFC]">
+                  Help & Support Center
+                </h3>
+                <span className="px-2 py-0.5 rounded-md bg-amber-100/70 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold uppercase tracking-wide border border-amber-200 dark:border-amber-800/60">
+                  Supabase Synced
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-[#94A3B8] max-w-xl leading-relaxed">
+                Experiencing a bug, technical glitch, or account issue? Submit a ticket directly to the campus admin team.
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="profile-report-issue-btn"
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs shadow-md shadow-amber-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>Report an Issue / Help</span>
+          </button>
         </div>
       </div>
 

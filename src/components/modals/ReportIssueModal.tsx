@@ -59,81 +59,36 @@ export const ReportIssueModal: React.FC = () => {
 
     setIsSubmitting(true);
 
-    try {
-      // 1. Direct REST POST call to Supabase as specified
-      let supaSuccess = false;
-      try {
-        const res = await fetch('https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports', {
-          method: 'POST',
-          headers: {
-            'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
-            'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify({
-            email: emailToSubmit,
-            report_description: textToSubmit,
-          }),
-        });
-
-        if (res.ok) {
-          supaSuccess = true;
-        } else {
-          const errBody = await res.text().catch(() => '');
-          console.warn('Supabase direct POST response notice:', res.status, errBody);
-        }
-      } catch (postErr) {
-        console.warn('Supabase direct POST fetch notice:', postErr);
-      }
-
-      // 2. Guaranteed local and server-side fallback storage
-      const reportId = 'rep_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-      const newReportRecord = {
-        id: reportId,
+    fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports", {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+        "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
         email: emailToSubmit,
-        report_description: textToSubmit,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        source: supaSuccess ? 'supabase' : 'local',
-      };
-
-      try {
-        const raw = localStorage.getItem('campusly_user_reports');
-        const list = raw ? JSON.parse(raw) : [];
-        list.unshift(newReportRecord);
-        localStorage.setItem('campusly_user_reports', JSON.stringify(list));
-      } catch (localErr) {
-        console.warn('Local reports cache notice:', localErr);
-      }
-
-      // Also forward to server backup endpoint if available
-      try {
-        await fetch('/api/user-reports', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: emailToSubmit,
-            report_description: textToSubmit,
-          }),
-        }).catch(() => {});
-      } catch {
-        // Safe ignore
-      }
-
-      // 3. Show success notification as instructed
-      showToast('Report submitted successfully to the support team!', 'success');
-
-      // Reset and close
-      setDescriptionText('');
-      setIsReportModalOpen(false);
-    } catch (err: any) {
-      console.error('Report submission error:', err);
-      showToast('Report submitted successfully to the support team!', 'success');
-      setIsReportModalOpen(false);
-    } finally {
-      setIsSubmitting(false);
-    }
+        report_description: textToSubmit
+      })
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => "");
+          throw new Error(errBody || "Failed to submit to Supabase");
+        }
+        alert("Report successfully submitted to Supabase!");
+        showToast("Report successfully submitted to Supabase!", "success");
+        setDescriptionText("");
+        setIsReportModalOpen(false);
+      })
+      .catch((err) => {
+        alert("Submission error: " + err.message);
+        setErrorMessage(err.message || "Failed to submit report to Supabase.");
+      })
+      .finally(() => {
+        setIsSubmitting(false);
+      });
   };
 
   return (
