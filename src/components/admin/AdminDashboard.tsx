@@ -21,6 +21,10 @@ import {
   UserX,
   Trash2,
   Eye,
+  EyeOff,
+  Copy,
+  Check,
+  Mail,
   Clock,
   Presentation as PresentationIcon,
   Building,
@@ -32,12 +36,15 @@ import {
   Activity,
   KeyRound,
   FileSpreadsheet,
+  AlertCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { AdminReportsSection } from './AdminReportsSection';
 
 export const AdminDashboard: React.FC = () => {
   const { user, logout, showToast } = useApp();
 
+  const [adminTab, setAdminTab] = useState<'students' | 'reports'>('students');
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [students, setStudents] = useState<StudentAdminRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -46,6 +53,27 @@ export const AdminDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [institutionFilter, setInstitutionFilter] = useState<string>('all');
   const [levelFilter, setLevelFilter] = useState<string>('all');
+
+  // Password visibility state & copy notification
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [showAllPasswords, setShowAllPasswords] = useState<boolean>(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const togglePasswordVisibility = (id: string) => {
+    setVisiblePasswords((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleShowAllPasswords = () => {
+    setShowAllPasswords((prev) => !prev);
+  };
+
+  const handleCopy = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedField(label);
+    setTimeout(() => setCopiedField(null), 2000);
+    showToast(`${label} copied to clipboard.`, 'info');
+  };
 
   // Selected student for details inspection modal
   const [selectedStudent, setSelectedStudent] = useState<StudentAdminRecord | null>(null);
@@ -63,26 +91,27 @@ export const AdminDashboard: React.FC = () => {
       else setIsRefreshing(true);
 
       try {
-        // Fetch all global profiles directly from Supabase Cloud Database via REST API
+        // 1. Fetch from the exact Supabase REST endpoint: Student details table
         let cloudProfiles: any[] = [];
-        let isSupabaseLoaded = false;
         try {
-          const res = await fetch(`${SUPABASE_PROFILES_ENDPOINT}?select=*&order=created_at.desc`, {
+          const res = await fetch('https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/Student%20details?select=*', {
             method: 'GET',
             headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+              'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
             },
           });
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data)) {
               cloudProfiles = data;
-              isSupabaseLoaded = true;
             }
+          } else {
+            const errorText = await res.text().catch(() => '');
+            console.error(`Failed to fetch from "Student details" table (Status ${res.status}):`, errorText);
           }
-        } catch (supaErr) {
-          console.warn('Supabase direct REST fetch notice in Admin Console:', supaErr);
+        } catch (fetchErr) {
+          console.error('Error fetching students from "Student details" table:', fetchErr);
         }
 
         // Also check local cache for seamless merge if needed
@@ -105,7 +134,7 @@ export const AdminDashboard: React.FC = () => {
           if (key) combinedMap.set(key, u);
         });
 
-        // 2. Overlay / add cloud profiles from Supabase
+        // 2. Overlay / add cloud profiles from Supabase "Student details"
         (cloudProfiles || []).forEach((p) => {
           const key = (p.email || p.id || '').toLowerCase().trim();
           if (key) {
@@ -114,16 +143,22 @@ export const AdminDashboard: React.FC = () => {
               ...p,
               id: p.id || combinedMap.get(key)?.id || key,
               name: p.full_name || p.name || combinedMap.get(key)?.name || 'Student',
+              full_name: p.full_name || p.name || combinedMap.get(key)?.full_name || 'Student',
               email: p.email || combinedMap.get(key)?.email || '',
               studentId: p.student_id || p.studentId || combinedMap.get(key)?.studentId || 'N/A',
+              student_id: p.student_id || p.studentId || combinedMap.get(key)?.student_id || null,
               institution: p.university_name || p.institution || p.university || combinedMap.get(key)?.institution || 'General University',
+              university_name: p.university_name || p.institution || p.university || combinedMap.get(key)?.university_name || 'General University',
+              password: p.password !== undefined ? p.password : (combinedMap.get(key)?.password || null),
               academicLevel: p.academic_level || p.academicLevel || combinedMap.get(key)?.academicLevel || '1st Year',
+              academic_level: p.academic_level || p.academicLevel || combinedMap.get(key)?.academic_level || '1st Year',
               department: p.department || combinedMap.get(key)?.department || 'General Studies',
               semester: p.semester || p.academic_level || p.academicLevel || combinedMap.get(key)?.semester || '1st Year',
               role: p.role || combinedMap.get(key)?.role || 'student',
               status: p.status || combinedMap.get(key)?.status || 'active',
               profilePhoto: p.profile_photo || p.profilePhoto || combinedMap.get(key)?.profilePhoto || '',
               createdAt: p.created_at || p.createdAt || combinedMap.get(key)?.createdAt || new Date().toISOString(),
+              created_at: p.created_at || p.createdAt || combinedMap.get(key)?.created_at || new Date().toISOString(),
               lastLoginAt: p.last_login_at || p.lastLoginAt || p.created_at || combinedMap.get(key)?.lastLoginAt || new Date().toISOString(),
               loginCount: p.login_count || p.loginCount || combinedMap.get(key)?.loginCount || 1,
             });
@@ -132,20 +167,26 @@ export const AdminDashboard: React.FC = () => {
 
         const mergedList = Array.from(combinedMap.values());
 
-        // Map to StudentAdminRecord structure
+        // Map to StudentAdminRecord structure with full_name, email, university_name, student_id, password
         let studentRecords: StudentAdminRecord[] = mergedList.map((u) => ({
           id: u.id,
           name: u.full_name || u.name || 'Student',
+          full_name: u.full_name || u.name || 'Student',
           email: u.email || '',
           studentId: u.student_id || u.studentId || 'N/A',
+          student_id: u.student_id || u.studentId || null,
           institution: u.university_name || u.institution || u.university || 'General University',
+          university_name: u.university_name || u.institution || u.university || 'General University',
+          password: u.password !== undefined ? u.password : null,
           academicLevel: u.academic_level || u.academicLevel || u.semester || '1st Year',
+          academic_level: u.academic_level || u.academicLevel || '1st Year',
           department: u.department || 'General Studies',
           semester: u.semester || u.academic_level || u.academicLevel || '1st Year',
           role: (u.role as any) || 'student',
           status: (u.status as any) || 'active',
           profilePhoto: u.profile_photo || u.profilePhoto || '',
           createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+          created_at: u.created_at || u.createdAt || new Date().toISOString(),
           lastLoginAt: u.last_login_at || u.lastLoginAt || u.created_at || new Date().toISOString(),
           loginCount: u.login_count || u.loginCount || 1,
           stats: {
@@ -164,9 +205,12 @@ export const AdminDashboard: React.FC = () => {
           const q = searchQuery.toLowerCase();
           studentRecords = studentRecords.filter(
             (s) =>
+              (s.full_name && s.full_name.toLowerCase().includes(q)) ||
               s.name.toLowerCase().includes(q) ||
               s.email.toLowerCase().includes(q) ||
+              (s.university_name && s.university_name.toLowerCase().includes(q)) ||
               s.institution.toLowerCase().includes(q) ||
+              (s.student_id && s.student_id.toLowerCase().includes(q)) ||
               (s.studentId && s.studentId.toLowerCase().includes(q))
           );
         }
@@ -412,7 +456,60 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#1E293B] pb-3">
+          <button
+            id="admin-tab-students-btn"
+            type="button"
+            onClick={() => setAdminTab('students')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              adminTab === 'students'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'bg-white dark:bg-[#0B1017] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131C28] border border-slate-200/80 dark:border-[#1E293B]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Student Registry</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] ${
+                adminTab === 'students'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-100 dark:bg-[#1A2536] text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {students.length}
+            </span>
+          </button>
+
+          <button
+            id="admin-tab-reports-btn"
+            type="button"
+            onClick={() => setAdminTab('reports')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              adminTab === 'reports'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'bg-white dark:bg-[#0B1017] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#131C28] border border-slate-200/80 dark:border-[#1E293B]'
+            }`}
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>User Reports</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                adminTab === 'reports'
+                  ? 'bg-amber-400 text-slate-900'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+              }`}
+            >
+              Dedicated
+            </span>
+          </button>
+        </div>
+
+        {adminTab === 'reports' ? (
+          <AdminReportsSection />
+        ) : (
+          <>
+            {/* Stats Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
           {/* Total Students */}
           <div className="bg-white dark:bg-[#0B1017] p-4.5 rounded-2xl border border-slate-200 dark:border-[#1E293B] shadow-xs">
@@ -582,7 +679,7 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Student Table */}
         <div className="bg-white dark:bg-[#0B1017] rounded-3xl border border-slate-200 dark:border-[#1E293B] shadow-xs overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1E293B] flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1E293B] flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                 Registered Students Directory
@@ -591,9 +688,24 @@ export const AdminDashboard: React.FC = () => {
                 {students.length}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Passwords securely hashed (Never exposed)</span>
+            <div className="flex items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={toggleShowAllPasswords}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#131C28] text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-200 dark:hover:bg-[#1A2536] transition cursor-pointer"
+                title={showAllPasswords ? 'Hide all passwords' : 'Show all passwords'}
+              >
+                {showAllPasswords ? (
+                  <EyeOff className="w-3.5 h-3.5 text-purple-600" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5 text-purple-600" />
+                )}
+                <span>{showAllPasswords ? 'Hide Passwords' : 'Show Passwords'}</span>
+              </button>
+              <div className="hidden sm:flex items-center gap-1 text-[11px] text-slate-400">
+                <span>Source:</span>
+                <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">Student details</span>
+              </div>
             </div>
           </div>
 
@@ -617,137 +729,211 @@ export const AdminDashboard: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 dark:bg-[#101823]/80 border-b border-slate-200 dark:border-[#1E293B] text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>
-                    <th className="py-3 px-4 sm:px-6">Student</th>
-                    <th className="py-3 px-4">Institution & Level</th>
+                    <th className="py-3 px-4 sm:px-6">Full Name</th>
+                    <th className="py-3 px-4">Email</th>
+                    <th className="py-3 px-4">University</th>
                     <th className="py-3 px-4">Student ID</th>
-                    <th className="py-3 px-4">Login Activity</th>
+                    <th className="py-3 px-4">Password</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#1E293B]">
-                  {students.map((student) => (
-                    <tr
-                      key={student.id}
-                      className="hover:bg-slate-50/60 dark:hover:bg-[#101823]/60 transition"
-                    >
-                      {/* Student Info */}
-                      <td className="py-3.5 px-4 sm:px-6">
-                        <div className="flex items-center gap-3">
-                          <UserAvatar
-                            src={student.profilePhoto}
-                            name={student.name}
-                            size="sm"
-                            ring={false}
-                          />
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-white">
-                              {student.name}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {student.email}
+                  {students.map((student) => {
+                    const isPasswordRevealed = showAllPasswords || !!visiblePasswords[student.id];
+                    return (
+                      <tr
+                        key={student.id}
+                        className="hover:bg-slate-50/60 dark:hover:bg-[#101823]/60 transition"
+                      >
+                        {/* full_name column */}
+                        <td className="py-3.5 px-4 sm:px-6">
+                          <div className="flex items-center gap-3">
+                            <UserAvatar
+                              src={student.profilePhoto}
+                              name={student.full_name || student.name}
+                              size="sm"
+                              ring={false}
+                            />
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-white">
+                                {student.full_name || student.name}
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">
+                                {student.role || 'student'} · {student.academic_level || student.academicLevel || '1st Year'}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Institution & Level */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
-                          {student.institution}
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {student.academicLevel} · {student.department}
-                        </div>
-                      </td>
-
-                      {/* Student ID */}
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-[#131C28] text-slate-700 dark:text-slate-300 font-mono text-[11px] font-bold border border-slate-200 dark:border-[#1E293B]">
-                          {student.studentId || 'N/A'}
-                        </span>
-                      </td>
-
-                      {/* Login Activity */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col text-[11px]">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            Last: {formatActivityTime(student.lastLoginAt)}
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {student.loginCount || 1} logins recorded
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-                            student.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              student.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'
-                            }`}
-                          />
-                          {student.status}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            id={`view-student-${student.id}`}
-                            type="button"
-                            onClick={() => setSelectedStudent(student)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition cursor-pointer"
-                            title="Inspect Student Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          <button
-                            id={`toggle-status-${student.id}`}
-                            type="button"
-                            disabled={updatingStudentId === student.id}
-                            onClick={() => handleToggleStatus(student)}
-                            className={`p-1.5 rounded-lg transition cursor-pointer ${
-                              student.status === 'active'
-                                ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50'
-                                : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
-                            }`}
-                            title={student.status === 'active' ? 'Deactivate Student' : 'Activate Student'}
-                          >
-                            {student.status === 'active' ? (
-                              <UserX className="w-4 h-4" />
-                            ) : (
-                              <UserCheck className="w-4 h-4" />
+                        {/* email column */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                            <a
+                              href={`mailto:${student.email}`}
+                              className="hover:text-purple-600 transition truncate max-w-[170px]"
+                              title={student.email}
+                            >
+                              {student.email}
+                            </a>
+                            {student.email && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(student.email, `Email ${student.email}`)}
+                                className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-[#131C28] transition cursor-pointer"
+                                title="Copy Email"
+                              >
+                                {copiedField === `Email ${student.email}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
                             )}
-                          </button>
+                          </div>
+                        </td>
 
-                          <button
-                            id={`delete-student-${student.id}`}
-                            type="button"
-                            onClick={() => setStudentToDelete(student)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
-                            title="Delete Student & Clean Data"
+                        {/* university_name column */}
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                            {student.university_name || student.institution || 'General University'}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {student.department || 'General Studies'}
+                          </div>
+                        </td>
+
+                        {/* student_id column */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-1 rounded-md bg-slate-100 dark:bg-[#131C28] text-slate-700 dark:text-slate-300 font-mono text-[11px] font-bold border border-slate-200 dark:border-[#1E293B]">
+                              {student.student_id || student.studentId || 'N/A'}
+                            </span>
+                            {(student.student_id || (student.studentId && student.studentId !== 'N/A')) && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(student.student_id || student.studentId, `Student ID`)}
+                                className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-[#131C28] transition cursor-pointer"
+                                title="Copy Student ID"
+                              >
+                                {copiedField === `Student ID` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* password column */}
+                        <td className="py-3.5 px-4">
+                          {student.password ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-md bg-purple-50/80 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-mono text-xs font-semibold border border-purple-200 dark:border-purple-900/50">
+                                {isPasswordRevealed ? student.password : '••••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePasswordVisibility(student.id)}
+                                className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-[#131C28] transition cursor-pointer"
+                                title={isPasswordRevealed ? 'Hide Password' : 'Show Password'}
+                              >
+                                {isPasswordRevealed ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(student.password!, `Password for ${student.name}`)}
+                                className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-slate-100 dark:hover:bg-[#131C28] transition cursor-pointer"
+                                title="Copy Password"
+                              >
+                                {copiedField === `Password for ${student.name}` ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">N/A</span>
+                          )}
+                        </td>
+
+                        {/* status column */}
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                              student.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            }`}
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                student.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'
+                              }`}
+                            />
+                            {student.status}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              id={`view-student-${student.id}`}
+                              type="button"
+                              onClick={() => setSelectedStudent(student)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition cursor-pointer"
+                              title="Inspect Student Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              id={`toggle-status-${student.id}`}
+                              type="button"
+                              disabled={updatingStudentId === student.id}
+                              onClick={() => handleToggleStatus(student)}
+                              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                student.status === 'active'
+                                  ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50'
+                                  : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
+                              }`}
+                              title={student.status === 'active' ? 'Deactivate Student' : 'Activate Student'}
+                            >
+                              {student.status === 'active' ? (
+                                <UserX className="w-4 h-4" />
+                              ) : (
+                                <UserCheck className="w-4 h-4" />
+                              )}
+                            </button>
+
+                            <button
+                              id={`delete-student-${student.id}`}
+                              type="button"
+                              onClick={() => setStudentToDelete(student)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                              title="Delete Student & Clean Data"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
 
       {/* Student Details Inspection Modal */}
@@ -804,20 +990,70 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Password Protection Badge */}
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 text-purple-800 dark:text-purple-300 text-[11px] font-semibold">
-                  <Shield className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                  <span>Password securely encrypted with PBKDF2 salt & hash. Zero plain text exposure.</span>
+                {/* Password & Credentials Section */}
+                <div className="p-3.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Student Password & Auth Credentials</span>
+                    </span>
+                    {selectedStudent.password && (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                        Recorded
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between bg-white dark:bg-[#0B1017] p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/30">
+                    <div className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 truncate mr-2">
+                      {selectedStudent.password ? (
+                        showAllPasswords || visiblePasswords[selectedStudent.id] ? (
+                          selectedStudent.password
+                        ) : (
+                          '••••••••••••'
+                        )
+                      ) : (
+                        <span className="text-slate-400 italic font-normal text-[11px]">No password recorded in Student details</span>
+                      )}
+                    </div>
+                    {selectedStudent.password && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(selectedStudent.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition cursor-pointer"
+                          title={showAllPasswords || visiblePasswords[selectedStudent.id] ? 'Hide password' : 'Show password'}
+                        >
+                          {showAllPasswords || visiblePasswords[selectedStudent.id] ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(selectedStudent.password!, `Password for ${selectedStudent.full_name || selectedStudent.name}`)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition cursor-pointer"
+                          title="Copy password"
+                        >
+                          {copiedField === `Password for ${selectedStudent.full_name || selectedStudent.name}` ? (
+                            <Check className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Academic Metadata */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-slate-50 dark:bg-[#101823] rounded-xl border border-slate-200/60 dark:border-[#1E293B]">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      Institution / University
+                      University Name
                     </span>
                     <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {selectedStudent.institution}
+                      {selectedStudent.university_name || selectedStudent.institution}
                     </p>
                   </div>
 
@@ -825,9 +1061,25 @@ export const AdminDashboard: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-400 uppercase">
                       Student ID
                     </span>
-                    <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {selectedStudent.studentId || 'N/A'}
-                    </p>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <p className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {selectedStudent.student_id || selectedStudent.studentId || 'N/A'}
+                      </p>
+                      {(selectedStudent.student_id || selectedStudent.studentId) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(selectedStudent.student_id || selectedStudent.studentId, 'Student ID')}
+                          className="p-1 text-slate-400 hover:text-purple-600 transition cursor-pointer"
+                          title="Copy Student ID"
+                        >
+                          {copiedField === 'Student ID' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-[#101823] rounded-xl border border-slate-200/60 dark:border-[#1E293B]">
@@ -835,7 +1087,7 @@ export const AdminDashboard: React.FC = () => {
                       Class / Academic Level
                     </span>
                     <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                      {selectedStudent.academicLevel}
+                      {selectedStudent.academic_level || selectedStudent.academicLevel}
                     </p>
                   </div>
 

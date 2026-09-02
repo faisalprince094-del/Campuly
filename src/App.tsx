@@ -18,6 +18,7 @@ import { AddTaskModal } from './components/modals/AddTaskModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
 import { AddEventModal } from './components/modals/AddEventModal';
 import { QuickActionsModal } from './components/modals/QuickActionsModal';
+import { ReportIssueModal } from './components/modals/ReportIssueModal';
 import { CampuslyLogo } from './components/ui/CampuslyLogo';
 
 const MainContent: React.FC = () => {
@@ -75,6 +76,7 @@ const MainContent: React.FC = () => {
       <AddExpenseModal />
       <AddEventModal />
       <QuickActionsModal />
+      <ReportIssueModal />
       <Toast />
     </AppShell>
   );

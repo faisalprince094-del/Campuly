@@ -87,16 +87,22 @@ export interface User {
 export interface StudentAdminRecord {
   id: string;
   name: string;
+  full_name?: string;
   email: string;
   studentId: string;
+  student_id?: string | null;
   institution: string;
+  university_name?: string | null;
+  password?: string | null;
   academicLevel: string;
+  academic_level?: string;
   department: string;
   semester: string;
   role: UserRole;
   status: UserStatus;
   profilePhoto?: string;
   createdAt: string;
+  created_at?: string;
   lastLoginAt?: string;
   loginCount?: number;
   stats: {
@@ -120,6 +126,15 @@ export interface AdminDashboardStats {
   totalStudyHours: number;
   totalExpensesLogged: number;
   totalPresentationsCreated: number;
+}
+
+export interface UserReport {
+  id?: string;
+  email: string;
+  report_description: string;
+  status?: string;
+  created_at?: string;
+  source?: 'supabase' | 'local' | 'hybrid';
 }
 
 export interface Subject {

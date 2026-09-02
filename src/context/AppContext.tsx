@@ -60,6 +60,8 @@ interface AppContextType {
   setIsQuickActionsOpen: (open: boolean) => void;
   isAddEventOpen: boolean;
   setIsAddEventOpen: (open: boolean) => void;
+  isReportModalOpen: boolean;
+  setIsReportModalOpen: (open: boolean) => void;
 
   // Global Timer State & Single Source of Truth for Study
   timerState: ActiveTimerState;
@@ -200,6 +202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCreatePresentationOpen, setIsCreatePresentationOpen] = useState(false);
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Global Study Timer State with persistent recovery across navigation and page refreshes
   const [timerState, setTimerState] = useState<ActiveTimerState>(() => {
@@ -1529,6 +1532,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsQuickActionsOpen,
         isAddEventOpen,
         setIsAddEventOpen,
+        isReportModalOpen,
+        setIsReportModalOpen,
         timerState,
         startTimer,
         pauseTimer,

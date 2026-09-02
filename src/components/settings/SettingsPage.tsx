@@ -7,10 +7,20 @@ import {
   Shield,
   RotateCcw,
   Database,
+  AlertCircle,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
-  const { user, updateProfile, theme, setTheme, resetToDefaultData, logout, showToast } = useApp();
+  const {
+    user,
+    updateProfile,
+    theme,
+    setTheme,
+    resetToDefaultData,
+    logout,
+    showToast,
+    setIsReportModalOpen,
+  } = useApp();
 
   const [currencySymbol, setCurrencySymbol] = useState(user?.preferences?.currencySymbol || '৳');
   const [studyGoal, setStudyGoal] = useState(user?.preferences?.dailyStudyGoalMinutes || 240);
@@ -160,6 +170,33 @@ export const SettingsPage: React.FC = () => {
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Demo Data</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Support & Issue Reporting */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-[#0B1017] border border-amber-200/80 dark:border-amber-950/60 shadow-xs space-y-4">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-[#F8FAFC]">Support & Issue Reporting</h3>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
+          <div>
+            <h4 className="text-xs font-bold text-slate-900 dark:text-[#F8FAFC]">Encountered a bug or need assistance?</h4>
+            <p className="text-[11px] text-slate-400">
+              Submit an issue directly to the administrator and technical support database.
+            </p>
+          </div>
+
+          <button
+            id="settings-report-issue-btn"
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="px-4 py-2.5 rounded-2xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-800/50 transition flex items-center gap-2 cursor-pointer shadow-xs"
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>Report Issue</span>
           </button>
         </div>
       </div>

@@ -2,13 +2,98 @@
 
 export const SUPABASE_URL = "https://pixypjmyouyxauzczyaq.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI";
-export const SUPABASE_PROFILES_ENDPOINT = `${SUPABASE_URL}/rest/v1/profiles`;
+export const SUPABASE_STUDENT_DETAILS_ENDPOINT = `${SUPABASE_URL}/rest/v1/Student%20details`;
+export const SUPABASE_PROFILES_ENDPOINT = SUPABASE_STUDENT_DETAILS_ENDPOINT;
+export const SUPABASE_USER_REPORTS_ENDPOINT = `${SUPABASE_URL}/rest/v1/user_reports`;
 
 export const getSupabaseHeaders = (extraHeaders: Record<string, string> = {}) => ({
   "apikey": SUPABASE_ANON_KEY,
   "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
   ...extraHeaders,
 });
+
+/**
+ * Direct REST API call to submit an issue report into Supabase user_reports table
+ */
+export async function submitUserReportDirectRest(reportData: {
+  email: string;
+  report_description: string;
+}): Promise<{ ok: boolean; status: number; message?: string }> {
+  try {
+    const response = await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports", {
+      method: "POST",
+      headers: {
+        "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+        "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
+        email: reportData.email,
+        report_description: reportData.report_description
+      })
+    });
+
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+    const errText = await response.text().catch(() => "");
+    return { ok: false, status: response.status, message: errText };
+  } catch (err: any) {
+    return { ok: false, status: 0, message: err?.message || "Network request failed" };
+  }
+}
+
+/**
+ * Direct REST API call to fetch all user reports for the Admin Console
+ */
+export async function fetchUserReportsDirectRest(): Promise<any[]> {
+  try {
+    const response = await fetch(
+      "https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports?select=*&order=created_at.desc",
+      {
+        method: "GET",
+        headers: {
+          "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+          "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI"
+        }
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    }
+  } catch (err) {
+    console.warn("Direct REST fetch notice for user_reports:", err);
+  }
+  return [];
+}
+
+/**
+ * Direct REST API call to update report status (e.g. pending, in_progress, resolved)
+ */
+export async function updateUserReportStatusDirectRest(reportId: string, status: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/user_reports?id=eq.${encodeURIComponent(reportId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+          "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ status })
+      }
+    );
+    return response.ok;
+  } catch (err) {
+    console.warn("Direct REST update report status notice:", err);
+    return false;
+  }
+}
 
 /**
  * Direct REST API call to insert a new student record into the Supabase profiles table
@@ -58,6 +143,27 @@ export async function saveProfileDirectRest(profileData: {
   }
 
   return true;
+}
+
+/**
+ * Direct REST API call to fetch all records from "Student details" table
+ */
+export async function fetchStudentDetailsDirectRest(): Promise<any[]> {
+  const response = await fetch(`${SUPABASE_STUDENT_DETAILS_ENDPOINT}?select=*`, {
+    method: "GET",
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Failed to fetch from "Student details" table (Status ${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
 }
 
 /**

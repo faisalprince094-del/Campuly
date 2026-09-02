@@ -25,6 +25,7 @@ import {
   PartyPopper,
   Flame,
   LogOut,
+  AlertCircle,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -36,6 +37,7 @@ export const Sidebar: React.FC = () => {
     unreadNotifsCount,
     user,
     logout,
+    setIsReportModalOpen,
   } = useApp();
 
   const handleNav = (tab: MainTab, defaultSub = 'overview') => {
@@ -391,6 +393,14 @@ export const Sidebar: React.FC = () => {
                 {unreadNotifsCount}
               </span>
             )}
+          </button>
+          <button
+            id="sidebar-support-report-issue-btn"
+            onClick={() => setIsReportModalOpen(true)}
+            className="w-full text-left text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 py-1 transition-colors font-medium flex items-center justify-between cursor-pointer"
+          >
+            <span>Report Issue</span>
+            <AlertCircle className="w-3.5 h-3.5" />
           </button>
           <button
             id="sidebar-support-logout-btn"
