@@ -382,15 +382,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Background Migration: Auto-migrate any un-synced LocalStorage student records to Supabase on app startup
+  // Background Migration: Auto-migrate any un-synced LocalStorage student records to Supabase on app startup via REST API
   useEffect(() => {
     const migrateLocalUsersToSupabase = async () => {
       try {
         const localUsers = getLocalItem<any[]>('campusly_users', []);
         if (!Array.isArray(localUsers) || localUsers.length === 0) return;
 
-        // Fetch existing emails in Supabase to avoid duplicates
-        const { data: existingProfiles } = await supabase.from('profiles').select('email');
+        // Fetch existing emails in Supabase via direct REST to avoid duplicates
+        const res = await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles?select=email", {
+          headers: {
+            "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+            "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+          },
+        });
+        if (!res.ok) return;
+        const existingProfiles = await res.json();
         const existingEmailSet = new Set(
           (existingProfiles || []).map((p: any) => (p.email || '').toLowerCase().trim())
         );
@@ -401,23 +408,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return email && !existingEmailSet.has(email) && !email.includes('admin');
         });
 
-        if (usersToSync.length > 0) {
-          const insertPayload = usersToSync.map((u: any) => ({
-            full_name: u.name || u.full_name || 'Student',
-            email: (u.email || '').toLowerCase().trim(),
-            university_name: u.university_name || u.institution || u.university || 'Campus University',
-            student_id: u.student_id || u.studentId || null,
-            password: u.password || 'password123',
-            academic_level: u.academic_level || u.academicLevel || u.semester || '1st Year',
-            department: u.department || 'General Studies',
-            role: u.role || 'student',
-            status: u.status || 'active',
-          }));
-
-          await supabase.from('profiles').insert(insertPayload);
+        for (const u of usersToSync) {
+          try {
+            await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
+              method: "POST",
+              headers: {
+                "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+                "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+              },
+              body: JSON.stringify({
+                full_name: u.name || u.full_name || 'Student',
+                email: (u.email || '').toLowerCase().trim(),
+                university_name: u.university_name || u.institution || u.university || 'Campus University',
+                student_id: u.student_id || u.studentId || null,
+                password: u.password || 'password123',
+                academic_level: u.academic_level || u.academicLevel || u.semester || '1st Year',
+                department: u.department || 'General Studies',
+                role: u.role || 'student',
+                status: u.status || 'active',
+              }),
+            });
+          } catch {
+            // continue
+          }
         }
       } catch (migrationErr) {
-        console.warn('Background Supabase migration note:', migrationErr);
+        console.warn('Background Supabase REST migration note:', migrationErr);
       }
     };
 
@@ -934,20 +952,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normalizedEmail = email.trim().toLowerCase();
       if (!normalizedEmail) throw new Error('Please enter your email address.');
 
-      // 1. Query Supabase Central Cloud Database profiles table
+      // 1. Query Supabase Central Cloud Database profiles table via REST API
       let cloudProfile: any = null;
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .ilike('email', normalizedEmail)
-          .maybeSingle();
+        const res = await fetch(
+          `https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles?email=ilike.${encodeURIComponent(normalizedEmail)}&select=*`,
+          {
+            method: 'GET',
+            headers: {
+              'apikey': 'sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+              'Authorization': 'Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI',
+            },
+          }
+        );
 
-        if (data && !error) {
-          cloudProfile = data;
+        if (res.ok) {
+          const profiles = await res.json();
+          if (Array.isArray(profiles) && profiles.length > 0) {
+            cloudProfile = profiles[0];
+          }
         }
       } catch (supaErr) {
-        console.warn('Supabase profile query note:', supaErr);
+        console.warn('Supabase REST profile query note:', supaErr);
       }
 
       if (cloudProfile) {
@@ -1024,23 +1050,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           throw new Error('Incorrect password. Please verify your credentials.');
         }
 
-        // On-the-fly migrate this local user into Supabase profiles table
+        // On-the-fly migrate this local user into Supabase profiles table via direct REST
         try {
-          await supabase.from('profiles').insert([
-            {
+          await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
+            method: "POST",
+            headers: {
+              "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+              "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal",
+            },
+            body: JSON.stringify({
               full_name: matchedUser.name || matchedUser.full_name || 'Student',
               email: normalizedEmail,
               university_name: matchedUser.university_name || matchedUser.institution || matchedUser.university || 'Campus University',
               student_id: matchedUser.student_id || matchedUser.studentId || null,
               password: password || matchedUser.password || 'password123',
-              academic_level: matchedUser.academic_level || matchedUser.academicLevel || matchedUser.semester || '1st Year',
-              department: matchedUser.department || 'General Studies',
-              role: matchedUser.role || 'student',
-              status: matchedUser.status || 'active',
-            },
-          ]);
+            }),
+          });
         } catch (syncErr) {
-          console.warn('On-the-fly Supabase migration notice during login:', syncErr);
+          console.warn('On-the-fly Supabase REST notice during login:', syncErr);
         }
 
         // Update login stats
@@ -1252,19 +1281,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const userId = `stu_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      // 1. Central Supabase Cloud Sync
+      // 1. Direct fetch POST request to Supabase REST API
       try {
-        await supabase.from('profiles').insert([
-          {
+        await fetch("https://pixypjmyouyxauzczyaq.supabase.co/rest/v1/profiles", {
+          method: "POST",
+          headers: {
+            "apikey": "sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+            "Authorization": "Bearer sb_publishable_CCUx-FLmFHp3jCiAVuV1kw_mOKsaMXI",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({
             full_name: normalizedName,
             email: normalizedEmail,
             university_name: normalizedInst,
             student_id: formData.studentId?.trim() || null,
             password: formData.password,
-          },
-        ]);
-      } catch (supaErr) {
-        console.warn('Supabase cloud profile insert notice:', supaErr);
+          }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              const errBody = await res.text().catch(() => "");
+              throw new Error("Status " + res.status + (errBody ? " - " + errBody : ""));
+            }
+            if (typeof window !== 'undefined') {
+              alert("Data Saved to Supabase Successfully!");
+            }
+          })
+          .catch((err) => {
+            console.warn("Supabase REST API Error:", err);
+            if (typeof window !== 'undefined') {
+              alert("Supabase API Error: " + err.message);
+            }
+          });
+      } catch (supaErr: any) {
+        console.warn('Supabase cloud profile insert error:', supaErr);
       }
 
       const newUser: User = {

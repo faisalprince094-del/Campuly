@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { supabase } from '../../supabase';
+import {
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  SUPABASE_PROFILES_ENDPOINT,
+  updateProfileStatusDirectRest,
+  deleteProfileDirectRest,
+} from '../../supabase';
 import { apiRequest } from '../../utils/api';
 import { StudentAdminRecord, AdminDashboardStats } from '../../types';
 import { CampuslyLogo } from '../ui/CampuslyLogo';
@@ -57,20 +63,26 @@ export const AdminDashboard: React.FC = () => {
       else setIsRefreshing(true);
 
       try {
-        // Fetch all global profiles directly from Supabase Cloud Database
+        // Fetch all global profiles directly from Supabase Cloud Database via REST API
         let cloudProfiles: any[] = [];
         let isSupabaseLoaded = false;
         try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!error && Array.isArray(data)) {
-            cloudProfiles = data;
-            isSupabaseLoaded = true;
+          const res = await fetch(`${SUPABASE_PROFILES_ENDPOINT}?select=*&order=created_at.desc`, {
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              cloudProfiles = data;
+              isSupabaseLoaded = true;
+            }
           }
         } catch (supaErr) {
-          console.warn('Supabase fetch notice in Admin Console:', supaErr);
+          console.warn('Supabase direct REST fetch notice in Admin Console:', supaErr);
         }
 
         // Also check local cache for seamless merge if needed
@@ -225,21 +237,11 @@ export const AdminDashboard: React.FC = () => {
     setUpdatingStudentId(student.id);
 
     try {
-      // Update in Supabase
+      // Update in Supabase via direct REST
       try {
-        if (student.email) {
-          await supabase
-            .from('profiles')
-            .update({ status: newStatus })
-            .ilike('email', student.email.trim());
-        } else if (student.id) {
-          await supabase
-            .from('profiles')
-            .update({ status: newStatus })
-            .eq('id', student.id);
-        }
+        await updateProfileStatusDirectRest(student.email || student.id, newStatus);
       } catch (supaErr) {
-        console.warn('Supabase profile status update:', supaErr);
+        console.warn('Supabase REST profile status update:', supaErr);
       }
 
       // Update in LocalStorage
@@ -290,21 +292,11 @@ export const AdminDashboard: React.FC = () => {
     setIsDeleting(true);
 
     try {
-      // Delete from Supabase
+      // Delete from Supabase via direct REST
       try {
-        if (studentToDelete.email) {
-          await supabase
-            .from('profiles')
-            .delete()
-            .ilike('email', studentToDelete.email.trim());
-        } else if (studentToDelete.id) {
-          await supabase
-            .from('profiles')
-            .delete()
-            .eq('id', studentToDelete.id);
-        }
+        await deleteProfileDirectRest(studentToDelete.email || studentToDelete.id);
       } catch (supaErr) {
-        console.warn('Supabase profile delete error:', supaErr);
+        console.warn('Supabase REST profile delete error:', supaErr);
       }
 
       // Delete from LocalStorage
